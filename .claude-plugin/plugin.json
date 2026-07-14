@@ -1,0 +1,11 @@
+{
+  "name": "cjg-skill-forge",
+  "description": "技能锻造炉 / Skill Forge——元技能：从零打造或重铸「全球最牛」的 WorkBuddy 技能，并让它在使用中持续进化（锻造/审视/重铸三模式）。",
+  "version": "2.7.1",
+  "author": {
+    "name": "藏经阁·易筋 (SkillSutra)"
+  },
+  "homepage": "https://github.com/J-levee/cjg-skill-forge",
+  "repository": "https://github.com/J-levee/cjg-skill-forge",
+  "license": "MIT"
+}
