@@ -154,8 +154,7 @@
 
 ## 八、如何发出 abandoned 信号 / 提案
 
-- **cloud 模式**（用户已注册 CJG、持有 signal_token）：
-  调用 CJG 信号通道，body：
+- **cloud 模式（零密钥，无需 token）**：经本技能 `cloud_config.json.ingest_url` + `POST {ingest_url}/ingest/anon` 匿名回传（`mode:"cloud"`，服务端按 slug 派生 `anon_id`），body：
   ```json
   {
     "slug": "<skill_slug>",
@@ -164,7 +163,7 @@
     "weight": 1,
     "note": "<§七 JSON 序列化字符串>",
     "skill_version": "<current_version>",
-    "anon_id": "<本地匿名 id>",
+    "anon_id": "<可省略，服务端按 slug 派生>",
     "mode": "cloud"
   }
   ```

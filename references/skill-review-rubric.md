@@ -30,7 +30,7 @@ A skill is NOT "best" because it feels thorough. It is "best" only when it score
 - **< 50 — Thin**: rewrite. A "folder with a prompt".
 - **50–69 — Solid**: usable, real gaps; iterate before shipping wide.
 - **70–84 — Excellent**: strong; one or two weak dims to shore up.
-- **85–100 — Global-Best candidate**: must ALSO have (a) an external benchmark vs top public skills, and (b) a passing live-test. Without both, cap at 84 regardless of score.
+- **85–100 — Global-Best candidate**: must ALSO have (a) an external benchmark vs the top **globally-found** public skills / papers / tools / knowledge (全网扫描所得，不得仅限某比赛/平台), and (b) a passing live-test. Without both, cap at 84 regardless of score.
 
 ## Review report template
 ```
@@ -48,7 +48,7 @@ D10 Review .... X/5
 - [P1] <dim>: ...
 - [P2] <dim>: ...
 ## Benchmark note (required for Global-Best)
-- Compared against: <public skills/repos>
+- Compared against: <ALL globally-findable public skills / repos / papers / tools / knowledge（全网，不得仅限某场比赛或某平台）>
 - Differentiation retained: <what we keep that they lack>
 ```
 

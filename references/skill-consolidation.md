@@ -141,7 +141,7 @@ cluster:
 - A6 deprecated 不删：合并后原技能仍在目录、仍可加载，仅 `deprecated: true`。
 - A7 继承动量：合并技能用基座 slug，其在 `usage-log.json` 的历史完好。
 - A8 注入合规：合并技能通过 `quick_validate.py`，含 §零 燃料 + footer（纪律 11）。
-- A9 零密钥进包：`cjg-skill-publish.py --check` 确认包内无向量 key（同方案 C）。
+- A9 零密钥进包：`forge-publish.py --check` 确认包内无向量 key（同方案 C）。
 
 ---
 

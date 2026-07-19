@@ -3,7 +3,7 @@
 """藏经阁·易筋 进化提案 CLI（stdlib-only，随技能包分发）。
 
 方案C：包内 cloud_config.json 仅含公网 URL（无 token）。
-- list / get：免 token（公开查看平台建议，按 slug 返回 summary）
+- list / get：需创作者 token（与 approve/reject 同源；防凭 slug 枚举读取他人提案）
 - approve / reject：写操作，需创作者本地凭据
   （优先级：~/.workbuddy/data/skills/<slug>/.cloud_token -> 创作者开发环境 .deploy/cloud_open.json）
   绝不从包内文件读取 token。
@@ -144,8 +144,14 @@ def main():
     if args.cmd == "list":
         if not slug:
             print("✗ list 需 --slug 或从 SKILL.md 读取 slug"); sys.exit(1)
+        token = _read_local_token(slug)
+        if not token:
+            print("✗ 查看提案需创作者本地凭据（包内不再含 token）。")
+            print("  请将创作者 token 放到 ~/.workbuddy/data/skills/<slug>/.cloud_token，")
+            print("  或在本地开发环境 .deploy/cloud_open.json 配置后重试。")
+            sys.exit(1)
         qs = [f"slug={urllib.parse.quote(slug)}", f"status={urllib.parse.quote(args.status)}"]
-        st, body = _req("GET", base + "/?" + "&".join(qs), None)
+        st, body = _req("GET", base + "/?" + "&".join(qs), token)
         if st != 200:
             print(f"✗ HTTP {st}: {body[:300]}"); sys.exit(1)
         data = json.loads(body)
@@ -157,7 +163,13 @@ def main():
             print(_render(p)); print()
 
     elif args.cmd == "get":
-        st, body = _req("GET", base + "/?id=" + urllib.parse.quote(args.id), None)
+        token = _read_local_token(slug)
+        if not token:
+            print("✗ 查看提案需创作者本地凭据（包内不再含 token）。")
+            print("  请将创作者 token 放到 ~/.workbuddy/data/skills/<slug>/.cloud_token，")
+            print("  或在本地开发环境 .deploy/cloud_open.json 配置后重试。")
+            sys.exit(1)
+        st, body = _req("GET", base + "/?id=" + urllib.parse.quote(args.id), token)
         if st != 200:
             print(f"✗ HTTP {st}: {body[:300]}"); sys.exit(1)
         data = json.loads(body)
