@@ -1,6 +1,6 @@
 # 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼 (cjg-skill-forge)
 
-> v2.9.5 — 藏经阁·易筋 (SkillSutra) 出品
+> v2.9.6 — 藏经阁·易筋 (SkillSutra) 出品
 
 |
 
@@ -11,7 +11,7 @@
 
 ### Git 克隆
 ```bash
-git clone git@gitee.com:J-levee/{slug}.git
+git clone git@gitee.com:J-levee/cjg-skill-forge.git
 ```
 将 `cjg-skill-forge/` 目录放入 `~/.workbuddy/skills/cjg-skill-forge/`。
 

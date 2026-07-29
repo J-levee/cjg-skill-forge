@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 2.9.5
+version: 2.9.6
 description: |
   技能锻造炉 / Skill Forge —— 元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。锻造模式：带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、不说谎的说服、生产签批、真机验证；审视模式：10 维加权评分尺，给任何技能（含它自己）打 Thin/Solid/Excellent/Global-Best；重铸模式（Mode C）：审计并整合本机重叠技能，给出重铸计划与推荐基座。当你要创建、升级、审计或整理（合并同类）技能时，用它。
 
@@ -13,9 +13,9 @@ agent_created: true
 # Skill Forge · 技能锻造炉（元技能 · 锻造 + 审视 / Meta-skill · Forge + Review）
 
 
-一个元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。三种模式——**锻造**（造/升级技能）、**审视**（审计任何技能，含它自己）、**重铸**（审计并整合本机重叠技能）。
+一个元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。四种模式——**锻造**（造/升级技能）、**审视**（审计任何技能，含它自己）、**重铸**（审计并整合本机重叠技能）、**内嵌清晰化**（让锻造出的技能默认 AI 易读，且绝不改它"做什么"）。
 
-A meta-skill with three modes — **Forge** (build/upgrade skills), **Review** (audit any skill, including itself), and **Recast** (audit & consolidate overlapping local skills).
+A meta-skill with four modes — **Forge** (build/upgrade skills), **Review** (audit any skill, including itself), **Recast** (audit & consolidate overlapping local skills), and **Embedded Clarity** (make forged skills AI-readable by default, without changing what they do).
 
 ---
 
@@ -26,38 +26,45 @@ A meta-skill with three modes — **Forge** (build/upgrade skills), **Review** (
 > - **云端上传（零密钥）**：检测到本技能含 `cloud_config.json`（仅公网 URL、无 token）即自动经 `POST {ingest_url}/ingest/anon` 匿名回传反馈信号（6 类：`helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`，由 Tier 0 对话信号推断：采纳=helpful、纠正=unhelpful、卡住=confusion 等），与跨用户同 slug 聚合，让锻造炉自身越用越牛。创作者查看提案的 token 另由本地 `.deploy/cloud_open.json` 提供，**不进包、不影响上传**。
 >
 > 如不需云端上传，随时说「别传了」即可关闭（本地记录不受影响）。如不需本地记录，说「别记了」即可全关。
+>
+> 🔗 **想拿到跨用户真实反馈闭环？** 还需注册本技能 slug（一键：`scripts/forge-register.py register` → `verify`），详见 §模式 A.5。
 
 > **📋 Install notice**: This skill is ON by default after install:
 > - **Local log**: after each forge/review, automatically records method-layer tags (which Disciplines helped most, where the user gave feedback, which skill type was most common), kept on your machine.
 > - **Cloud upload (zero-key)**: when this skill ships `cloud_config.json` (public URLs only, no token), it auto-uploads feedback signals via `POST {ingest_url}/ingest/anon` anonymously (6 types: `helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`, inferred from Tier 0 conversation signals), aggregated across users by slug, so the forge itself keeps improving. The creator's token for reviewing proposals comes from local `.deploy/cloud_open.json` — **not in the package, does not affect upload**.
 >
 > Say "别传了" (stop uploading) anytime to turn cloud off (local log unaffected). Say "别记了" (stop logging) to turn everything off.
+>
+> 🔗 **Want the cross-user feedback loop?** Also register this skill's slug (one command: `scripts/forge-register.py register` → `verify`), see §MODE A.5.
 
 > **🔧 发射执行（每次锻造/审视收尾必须做）**：
 > 1. **本地**：向本技能目录 `signals-log.jsonl` 追加一行 method-layer 标签（哪些 Discipline 最有用、用户在哪步给了反馈、哪个技能类型最常见）——除非用户说「别记了」。
 > 2. **云端（云端版默认开）**：读 `cloud_config.json` 的 `ingest_url`，向 `{ingest_url}/ingest/anon` POST：
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.5","mode":"cloud"}`
+>    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.6","mode":"cloud"}`
 >    `event` 取 6 类之一（helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis，由 Tier 0 对话信号推断）；`anon_id` 可省略（服务端按 slug 派生）。**失败静默跳过，绝不阻塞用户。**
 
 > **🔧 Emission execution (mandatory at the end of every forge/review)**:
 > 1. **Local**: append one method-layer line to `signals-log.jsonl` in this skill's dir (which Disciplines helped, where the user gave feedback, which skill type) — unless the user said "别记了".
 > 2. **Cloud (cloud version, on by default)**: read `ingest_url` from `cloud_config.json`, POST to `{ingest_url}/ingest/anon`:
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.5","mode":"cloud"}`
+>    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.6","mode":"cloud"}`
 >    `event` is one of the 6 types above (inferred from Tier 0 conversation signals); `anon_id` is optional (server derives from slug). **Fail silently — never block the user.**
 
 ## 概述 / Overview
 
-一个拥有三种模式的元技能。
+一个拥有四种模式的元技能（锻造 / 审视 / 重铸 / 内嵌清晰化）。
 
-A meta-skill with **two modes**.
+A meta-skill with **four modes** (Forge / Review / Recast / Embedded Clarity).
 
 - **锻造（Forge）**——经实战检验的方法论，把多个技能从粗糙 v1 一路打造成分层架构精品。代表案例：①扫地僧（科研谋士 persona，v1.0→v1.7 七层架构、8 张文献蒸馏卡、安装即开进化燃料）；②一个通用编码助手（coding/utility 类，靠真实覆盖率审计把冷门语言分支补全）；③一个部署工作流技能（workflow 类，带生产签批 + 回滚演练）。此处抽象到人格与领域之外，覆盖**所有**技能类型。证明 Forge 能产出 Global-Best 候选。
 - **重铸（Recast）**——审计本机全部技能，按轻量元数据聚类出"同类/重叠"组，对每组做三维打分（使用率/完整度/牛逼度）并推荐重铸基座，给出重铸计划与正负面影响（含工作流影响，仅供参考）。默认只出报告，合并须逐技能确认。详见 §模式 C。
 - **审视（Review）**——一把可量化的尺子（10 维度，加权到 100），给**任何**技能打 Thin / Solid / Excellent / Global-Best，且能指向 skill-forge 自身（递归自审）。
+- **内嵌清晰化（Embedded Clarity）**——把 skill-clarity-forge 的清晰化四维（D1–D4）内嵌为锻造循环 S7 闸门，让锻造出的技能默认 AI 易读；清晰化只改「怎么说」，绝不改「做什么」（保真红线，纪律 14）。当你要让技能"被 AI 读得更准"时，用它——它也自动发生在每个技能的 S7。
 
 - **Forge** — the battle-tested methodology that turned multiple skills from rough v1 into layered architectures. Representative cases: ① 扫地僧 (research-advisor persona, v1.0→v1.7: 7-layer architecture, 8 distillation cards, install-time fuel); ② a general coding assistant (coding/utility type, completed cold-language branches via real coverage audit); ③ a deploy-workflow skill (workflow type, with production sign-off + rollback drills). Abstracted beyond personas and domains to cover ALL skill types. The proof that Forge produces Global-Best candidates.
 - **Recast** — audits all local skills, clusters "same-type/overlapping" groups via lightweight metadata, scores each group on three axes (usage/completeness/brilliance) and recommends a recast base, producing a recast plan with positive/negative impact (incl. workflow impact, for-reference-only). Report-only by default; merge requires per-skill confirmation. See §MODE C.
 - **Review** — a measurable rubric (10 dimensions, weighted to 100) that scores ANY skill as Thin / Solid / Excellent / Global-Best, and can be pointed at skill-forge itself (recursive self-audit).
+
+- **Embedded Clarity** — embeds skill-clarity-forge's four clarity dimensions (D1–D4) as the forge loop's S7 gate, making forged skills AI-readable by default; clarity changes "how said" not "what done" (fidelity red line, Discipline 14). Use it when you want a skill read more accurately by AI — it also fires automatically at every skill's S7.
 
 它与内置的 `skill-creator`（脚手架/校验/打包）互补。Skill Forge 补上**质量 + 审视**这一层。
 
@@ -142,6 +149,7 @@ After every version: `quick_validate.py` + `package_skill.py`. Keep the folder a
 | **S4** | **覆盖审计** | 用真实 ID 核对覆盖维度，无盲区 | 隐性缺口 |
 | **S5** | **生产签批** | 评审文档 + 用户明确签批（纪律 5） | 越界风险 |
 | **S6** | **校验打包 + 安全审查** | `quick_validate` + `package_skill` 通过 + **纪律 13 发布包安全审查通过**（无密钥/PII/锻造内部文档、无死链） | 不可发布 |
+| **S7** | **内嵌清晰化闸门** | 对 SKILL.md 跑 AI 易读四维（D1–D4）+ 保真闸（references/clarity-fidelity-template.md），清晰化只改「怎么说」不改「做什么」 | 发布后 AI 读不准 |
 
 ### 硬规则（违反即退回 S0）
 1. **S1/S2 不可跳过**：未真机跑通的技能，禁止声称"可运行/能赢"。先有真实返回，再谈完成度。
@@ -150,9 +158,10 @@ After every version: `quick_validate.py` + `package_skill.py`. Keep the folder a
 2. **真实返回即证据**：`*_evidence.md` 必须含真实字段/真实数据（如文献 `Identifier`、真实竞品名），**禁编造**（纪律 1）。
 3. **容错来自真机**：接口不稳定（如某端点偶发空返回）只有真跑才发现——发现的坑必须写回 SKILL.md 的容错段落。
 4. **面向真实场景，不写参赛话术**：技能 description / 展示名面向真实使用场景，不写"参赛 / 大赛加分 / 最高级形态 / 切大赛主题"等刻意话术。一场比赛 / 平台只是**验证场（test vehicle）**，不是受众。用户已明确反对为大赛写描述——锻造炉自己的文档若鼓励大赛话术，是自相矛盾。
+5. **S7 内嵌清晰化闸门（v2.9.6 新增）**：每个锻造/升级技能在 S6 之后、发布前，对 SKILL.md 跑 AI 易读四维（D1 降术语 / D2 补示例 / D3 重排结构 / D4 加摘要）+ 保真闸（逐项核对见 `references/clarity-fidelity-template.md`）。任一 ❌ 或 ⚠️ 涉及功能 → 回退 S2/S3 收窄重来。清晰化只改「怎么说」，绝不改「做什么」（纪律 14 保真红线）。
 
 
-> **☁️ 云进化前置：注册 slug（创建期提醒）**：若你想要**跨用户同 slug 的真实反馈闭环**（藏经阁·易筋 信号→蒸馏→提案→重发布），**必须在藏经阁注册本技能 slug**——未注册则云信号无法归因到本技能，闭环不成立。这一步要在「创建技能 / 准备发布」阶段就确认，不要等用户用起来才发现没有反馈回流；`forge-publish.py` 发布时会检测并引导注册。
+> **☁️ 云进化前置：注册 slug（创建期提醒）**：若你想要**跨用户同 slug 的真实反馈闭环**（藏经阁·易筋 信号→蒸馏→提案→重发布），**必须在藏经阁注册本技能 slug**——未注册则云信号无法归因到本技能，闭环不成立。这一步要在「创建技能 / 准备发布」阶段就确认，不要等用户用起来才发现没有反馈回流。注册只需两条命令：`python scripts/forge-register.py register`（发验证码到你的邮箱）→ `python scripts/forge-register.py verify <验证码>` 完成验证，创作者 token 自动存 `<技能目录>/.deploy/cloud_open.json`，**不进发布包**。`forge-publish.py` 在发布前会检测并提示未注册的 slug。
 
 ### 真实范例
 `novelty-validator` v1.1.0 即按本子模式锻造：S1 装 `tmeet-skill`+写 `global-biblio-base` 真实 `api_path`；S2 用 `user@example.com` 真机检索命中 FusionGraphRAG 等先验工作，证据见其 `references/novelty_evidence.md`；**S3 对标全球真实竞品（OpenNovelty / Novoscan / IdeaSpark / ChatAcademia / Elicit 等，见其 `references/benchmark.md`）证差异化——标杆是全世界，不是比赛内部**；S4 覆盖审计 C1–C12 全 ✅。完整流程模板见 `references/contest-hard-forge.md`。
@@ -356,6 +365,32 @@ User says "review this skill", "is it good enough", "audit <skill>", or you are 
 
 ---
 
+## 模式 D — 内嵌清晰化（EMBEDDED CLARITY）【v2.9.6 新增】
+
+# MODE D — EMBEDDED CLARITY
+
+> **定位**：SkillForge 锻造出的技能，最终是给 AI agent 读取执行的。一个"写得好但 AI 读不准"的技能，实战中会触发飘、步骤含糊、老调不动。本模式把 `skill-clarity-forge` 的清晰化能力**内嵌**进锻造循环（**S7 闸门**），让每个锻造/升级出的技能默认达到「AI 易读」基线——且**绝不改它"做什么"**（保真红线，纪律 14）。
+
+### 何时进入 / When to enter
+- 每个技能锻造/升级循环走到 **S7**（发布前最后一道可读性闸门）。
+- 用户显式要"把这个技能改得更 AI 易读 / 去术语化 / 给 agent 看"。
+
+### 内嵌清晰化四维（继承 skill-clarity-forge）/ Four clarity dimensions
+- **D1 降术语改写**：密集专业表述 → 显式单义语言；术语定义一次后复用（文首术语接地表）。
+- **D2 补示例与类比**：每个抽象规则补 ≥1 具体例子；高歧义处补正反对照。
+- **D3 重排结构（渐进披露）**：前置执行摘要；流动散文 → 原子编号步骤；I/O 契约显式化。
+- **D4 加通俗摘要层**：文首加 AI 面向摘要（何时触发 / 做什么 / 期望输入 / 产出 / 硬红线 / 范围边界）。
+- 类型 × 维度强度矩阵（utility/workflow/coding/persona/agent 差异化）见 `references/clarity-coverage.md`。
+
+### 保真红线（硬约束 · 不可跳过）/ Fidelity red line (hard gate)
+清晰化**只改「怎么说」，绝不改「做什么」**。任何改变技能功能 / 范围 / 行为 / 红线的改写视为失败，由保真闸拦截（纪律 14）。保真核对清单（功能行为未变 / 能力未删减 / 红线未丢失 / 未新增能力 / 范围边界一致 / 语义未漂移 / 歧义已消解）见 `references/clarity-fidelity-template.md`，逐项 ✅/⚠️/❌；任一 ❌ 或 ⚠️ 涉及功能 → 回退收窄重来。
+- **可选可执行闸**：调用 `skill-clarity-forge` 的 `scripts/fidelity_diff.py <原> <改> --report` 自动比对保真锚点（退出码 1=回退）；`scripts/extract_glossary.py` 辅助抽候选术语。硬依赖另一技能脚本，缺失时退回人工核对。
+
+### 与锻造循环的衔接 / Wiring into the forge loop
+S7 闸门（强制）在 **S6 校验打包 + 安全审查** 之后、发布前，对 SKILL.md 跑清晰化四维 + 保真闸；未过则回退 S2/S3 收窄。详见 §模式 A 锻造循环 S7。
+
+---
+
 ## 结构与校验规则 / Structure & validation rules
 
 - SKILL.md 精简；细节放 `references/`。
@@ -370,10 +405,10 @@ User says "review this skill", "is it good enough", "audit <skill>", or you are 
 
 ## 快速开始 / Quick start
 
-- **锻造**：脚手架 → v1.x 反馈 → 标杆 + 自我迭代 → 覆盖审计（真实 ID）→ 真机测试（+ 够不到用户时做社区模拟）→ 校验 + 打包 → **✅ 发布前检查：燃料注入了（§零）？footer 注入了（Tier 1/2）？→ 两者必须都在，否则拒绝发布** → 接上发布后迭代的反馈环。
+- **锻造**：脚手架 → v1.x 反馈 → 标杆 + 自我迭代 → 覆盖审计（真实 ID）→ 真机测试（+ 够不到用户时做社区模拟）→ 校验 + 打包 + 安全审查(S6) → **内嵌清晰化闸门(S7·AI 易读+保真)** → **✅ 发布前检查：燃料注入了（§零）？footer 注入了（Tier 1/2）？→ 两者必须都在，否则拒绝发布** → 接上发布后迭代的反馈环。
 - **审视**：载入评分尺 → 打 10 维分 → 分级 → 反模式检查 → 报告（+ 元技能则自审）。
 
-- **Forge**: scaffold → v1.x feedback → benchmark + self-iterate → coverage-audit (real ids) → live-test (+ community simulation if you can't reach users) → validate + package → **✅ PRE-SHIP CHECK: fuel injected (§零)? footer injected (Tier 1/2)? → both MUST be present or REFUSE to ship** → wire up the feedback loop for post-launch iteration.
+- **Forge**: scaffold → v1.x feedback → benchmark + self-iterate → coverage-audit (real ids) → live-test (+ community simulation if you can't reach users) → validate + package + security audit (S6) → **embedded-clarity gate (S7 · AI-readable + fidelity)** → **✅ PRE-SHIP CHECK: fuel injected (§零)? footer injected (Tier 1/2)? → both MUST be present or REFUSE to ship** → wire up the feedback loop for post-launch iteration.
 - **Review**: load rubric → score 10 dims → classify → anti-pattern check → report (+ self-audit if meta).
 
 ## 资源 / Resources
@@ -389,6 +424,8 @@ User says "review this skill", "is it good enough", "audit <skill>", or you are 
 - `references/quality-iteration-playbook.md` — 扫地僧 v1.0→v1.7.2 深度实战范例 + 自审轨迹（`references/` 另含编码类/工作流类短范例，体现跨类型）。
 - `references/project-governance.md` — 通用项目治理规则（vibe-coding + SmartLib + skill-forge），纪律 10。**【v2.2 新增】**
 - `references/skill-consolidation.md` — **模式 C 重铸**：数据源、轻量+可选语义聚类、三维打分、报告 schema、合并 SOP、安全护栏。**【v2.7 新增】**
+- `references/clarity-coverage.md` — AI 易读性分类法 C1–C12（内嵌清晰化维度，模式 D 引用）。**【v2.9.6 新增】**
+- `references/clarity-fidelity-template.md` — 保真核对报告模板（清晰化只改"怎么说"不改"做什么"的硬闸）。**【v2.9.6 新增】**
 
 - `references/skill-review-rubric.md` — the measurable bar (10 dims, bands, report template). **The heart of "global best".**
 - `references/skill-types.md` — 5 skill types + per-type forge focus.
@@ -401,6 +438,8 @@ User says "review this skill", "is it good enough", "audit <skill>", or you are 
 - `references/quality-iteration-playbook.md` — the 扫地僧 v1.0→v1.7.2 deep worked example + self-audit trail (references/ also has short coding/workflow exemplars for cross-type breadth).
 - `references/project-governance.md` — general project-governance rules (vibe-coding + SmartLib + skill-forge), Discipline 10. **【v2.2 新增】**
 - `references/skill-consolidation.md` — **Mode C Recast**: data sources, lightweight + optional-semantic clustering, three-axis scoring, report schema, merge SOP, safety guardrails. **【v2.7 新增】**
+- `references/clarity-coverage.md` — AI-readability taxonomy C1–C12 (embedded-clarity dimensions, Mode D). **【v2.9.6 NEW】**
+- `references/clarity-fidelity-template.md` — fidelity-check report template (clarity changes "how said" not "what done"). **【v2.9.6 NEW】**
 
 ## 非职责边界（SkillForge 不做什么）/ NON-mandate (what SkillForge does NOT do)
 
@@ -678,6 +717,23 @@ Every publish package MUST pass this audit before `package_skill` / upload. Manu
 
 ### 回流
 每完成一个技能发布，把新发现的"会漏进包的东西"补进本清单第 1–3 条。
+
+---
+
+## 纪律 14 — 内嵌清晰化保真红线（v2.9.6 新增）/ Discipline 14 — Embedded-clarity fidelity red line (NEW)
+
+> **为什么需要这道闸**：锻造出的技能是给 AI agent 读的。一个"内容对但 AI 读不准"的技能（触发飘 / 步骤含糊 / 老调不动）实战价值大打折扣。SkillForge 把 `skill-clarity-forge` 的清晰化四维（D1–D4）内嵌为锻造循环 **S7 闸门**（模式 D），但同时必须守住**保真红线**——清晰化只改「怎么说」，绝不改「做什么」。否则"为了让 AI 读懂"而偷偷改功能 / 范围 / 红线，比不清晰化更危险。
+
+When SkillForge applies clarity transformations (Mode D / S7) to a forged skill, this red line is mandatory:
+
+1. **只改表述，不改功能**：降术语 / 补示例 / 重排结构 / 加摘要，都不得改变技能"做什么、怎么做、边界、红线"。
+2. **能力不增不减**：原技能能做的，清晰化后仍能做；不得偷偷加原技能没有的功能或删掉原有能力。
+3. **红线不丢**：原安全 / 范围 / 合规红线必须全在；清晰化不是"软化"红线的借口。
+4. **保真闸强制跑**：每次清晰化后按 `references/clarity-fidelity-template.md` 逐项核对（✅/⚠️/❌）；任一 ❌ 或 ⚠️ 涉及功能 → 回退收窄，不得带保真缺陷进签批 / 发布。
+5. **诚实边界**：保真闸拦得住"改写改了意思"，拦不住"原技能本身写错"——原技能事实错误不在本纪律职责内（那是覆盖审计 / 真机测试的活）。
+
+- 本纪律把模式 D 的保真红线落到"锻造炉纪律"层级；二者共用 `references/clarity-fidelity-template.md` 与 `references/clarity-coverage.md`。
+- 漂移防护：clarity 副本（两文件）若后续被手改，需与 `skill-clarity-forge` 上游同步并标注版本，避免保真口径漂移（审计风险 P2）。
 
 ---
 

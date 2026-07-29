@@ -46,6 +46,8 @@ from typing import Callable, Optional
 # 路径与常量
 # ============================================================
 SKILLS_BASE = Path.home() / ".workbuddy" / "skills"
+# 本脚本所在目录（技能锻造炉 scripts/），用于指向同目录的 forge-register.py
+FORGE_SCRIPTS = Path(__file__).resolve().parent
 # 云端接入配置（方案C·零密钥）：cloud_config.json 仅含公网 URL，不含 token（SkillHub 拒绝点号隐藏文件）
 CLOUD_CONFIG_FILE = "cloud_config.json"
 DEFAULT_INGEST_URL = "https://1318491188-fpwsv5k3eh.ap-guangzhou.tencentscf.com"
@@ -196,6 +198,24 @@ def get_skillhub_token() -> Optional[str]:
         return creds.get("user", {}).get("token")
     except Exception:
         return None
+
+
+def notice_registration(skill_dir: Path, slug: str):
+    """发布前提示：若本技能 slug 尚未注册（无 .deploy/cloud_open.json 的创作者 token），
+    跨用户真实反馈闭环（信号→蒸馏→提案→重发布）未激活，引导用 forge-register.py 注册。
+    非阻塞——本地发布仍照常进行。"""
+    open_path = skill_dir / ".deploy" / "cloud_open.json"
+    token = None
+    if open_path.exists():
+        try:
+            token = json.loads(open_path.read_text(encoding="utf-8")).get("signal_token")
+        except Exception:
+            token = None
+    if not token:
+        print(f"\n  ℹ️  云进化提示：slug「{slug}」尚未注册（缺 .deploy/cloud_open.json 的创作者 token）。")
+        print(f"      跨用户真实反馈闭环（信号→蒸馏→提案→重发布）未激活。")
+        print(f"      注册（需验证邮箱）：python {FORGE_SCRIPTS / 'forge-register.py'} register")
+        print(f"      本机技能目录即：{skill_dir}")
 
 
 # ============================================================
@@ -516,6 +536,8 @@ def main():
 
     slug = args.slug or read_field(skill_dir, "slug") or (args.skill or "")
     version = args.version or read_version(skill_dir)
+    # 云进化注册提示（非阻塞）
+    notice_registration(skill_dir, slug)
     if not version and not args.check:
         print(f"✗ 无法解析版本号（frontmatter 无 version 且未用 --version 指定）")
         sys.exit(1)
