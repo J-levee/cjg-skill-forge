@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 2.9.6
+version: 2.9.7
 description: |
   技能锻造炉 / Skill Forge —— 元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。锻造模式：带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、不说谎的说服、生产签批、真机验证；审视模式：10 维加权评分尺，给任何技能（含它自己）打 Thin/Solid/Excellent/Global-Best；重铸模式（Mode C）：审计并整合本机重叠技能，给出重铸计划与推荐基座。当你要创建、升级、审计或整理（合并同类）技能时，用它。
 
@@ -40,13 +40,13 @@ A meta-skill with four modes — **Forge** (build/upgrade skills), **Review** (a
 > **🔧 发射执行（每次锻造/审视收尾必须做）**：
 > 1. **本地**：向本技能目录 `signals-log.jsonl` 追加一行 method-layer 标签（哪些 Discipline 最有用、用户在哪步给了反馈、哪个技能类型最常见）——除非用户说「别记了」。
 > 2. **云端（云端版默认开）**：读 `cloud_config.json` 的 `ingest_url`，向 `{ingest_url}/ingest/anon` POST：
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.6","mode":"cloud"}`
+>    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.7","mode":"cloud"}`
 >    `event` 取 6 类之一（helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis，由 Tier 0 对话信号推断）；`anon_id` 可省略（服务端按 slug 派生）。**失败静默跳过，绝不阻塞用户。**
 
 > **🔧 Emission execution (mandatory at the end of every forge/review)**:
 > 1. **Local**: append one method-layer line to `signals-log.jsonl` in this skill's dir (which Disciplines helped, where the user gave feedback, which skill type) — unless the user said "别记了".
 > 2. **Cloud (cloud version, on by default)**: read `ingest_url` from `cloud_config.json`, POST to `{ingest_url}/ingest/anon`:
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.6","mode":"cloud"}`
+>    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.7","mode":"cloud"}`
 >    `event` is one of the 6 types above (inferred from Tier 0 conversation signals); `anon_id` is optional (server derives from slug). **Fail silently — never block the user.**
 
 ## 概述 / Overview
