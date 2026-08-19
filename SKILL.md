@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 2.9.7
+version: 2.9.9
 description: |
   技能锻造炉 / Skill Forge —— 元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。锻造模式：带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、不说谎的说服、生产签批、真机验证；审视模式：10 维加权评分尺，给任何技能（含它自己）打 Thin/Solid/Excellent/Global-Best；重铸模式（Mode C）：审计并整合本机重叠技能，给出重铸计划与推荐基座。当你要创建、升级、审计或整理（合并同类）技能时，用它。
 
@@ -37,17 +37,15 @@ A meta-skill with four modes — **Forge** (build/upgrade skills), **Review** (a
 >
 > 🔗 **Want the cross-user feedback loop?** Also register this skill's slug (one command: `scripts/forge-register.py register` → `verify`), see §MODE A.5.
 
-> **🔧 发射执行（每次锻造/审视收尾必须做）**：
-> 1. **本地**：向本技能目录 `signals-log.jsonl` 追加一行 method-layer 标签（哪些 Discipline 最有用、用户在哪步给了反馈、哪个技能类型最常见）——除非用户说「别记了」。
-> 2. **云端（云端版默认开）**：读 `cloud_config.json` 的 `ingest_url`，向 `{ingest_url}/ingest/anon` POST：
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.7","mode":"cloud"}`
->    `event` 取 6 类之一（helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis，由 Tier 0 对话信号推断）；`anon_id` 可省略（服务端按 slug 派生）。**失败静默跳过，绝不阻塞用户。**
+> **🔧 发射执行（每次锻造/审视/重铸/清晰化收尾必须做 · 末步硬纪律）**：
+> 七层应答结束前，必须执行 `references/signals.md` 末步 one-liner，向本技能目录 `signals-log.jsonl` 追加一行方法层信号（**含 `signal_id` 幂等键**）——除非用户说「别记了」。
+> **云端上传不在此处做**：由 WorkBuddy 每日 23:30 的 cron 自动跑 `scripts/upload_signals.py` 确定性批量上传（零密钥、失败静默、断点续传、防重复）。无需你手动 POST。
+> one-liner 与字段语义、L1–L7 层码见 `references/signals.md`。
 
-> **🔧 Emission execution (mandatory at the end of every forge/review)**:
-> 1. **Local**: append one method-layer line to `signals-log.jsonl` in this skill's dir (which Disciplines helped, where the user gave feedback, which skill type) — unless the user said "别记了".
-> 2. **Cloud (cloud version, on by default)**: read `ingest_url` from `cloud_config.json`, POST to `{ingest_url}/ingest/anon`:
->    `{"slug":"cjg-skill-forge","event":"helpful","method_layer":"forge","weight":1,"skill_version":"2.9.7","mode":"cloud"}`
->    `event` is one of the 6 types above (inferred from Tier 0 conversation signals); `anon_id` is optional (server derives from slug). **Fail silently — never block the user.**
+> **🔧 Emission execution (mandatory last step of every forge/review/recast/clarity · hard rule)**:
+> Before ending the response, run the one-liner in `references/signals.md` to append one method-layer signal line (with `signal_id` idempotency key) to `signals-log.jsonl` in this skill's dir — unless the user said "别记了".
+> **Cloud upload is NOT done here**: a daily 23:30 WorkBuddy cron runs `scripts/upload_signals.py` to upload in batches (zero-key, fail-silent, resumable, dedup). No manual POST needed.
+> See `references/signals.md` for the one-liner and field semantics (L1–L7 layer codes).
 
 ## 概述 / Overview
 
@@ -148,8 +146,9 @@ After every version: `quick_validate.py` + `package_skill.py`. Keep the folder a
 | **S3** | **外部标杆（全球）** | 扒 ≥3 个**全球真实竞品**（覆盖全网技能/项目/工具/论文/知识，不得仅限局部场景如某比赛）做对标表，证差异化 | 不知排第几 / 虚假安全感 |
 | **S4** | **覆盖审计** | 用真实 ID 核对覆盖维度，无盲区 | 隐性缺口 |
 | **S5** | **生产签批** | 评审文档 + 用户明确签批（纪律 5） | 越界风险 |
-| **S6** | **校验打包 + 安全审查** | `quick_validate` + `package_skill` 通过 + **纪律 13 发布包安全审查通过**（无密钥/PII/锻造内部文档、无死链） | 不可发布 |
+| **S6** | **校验打包 + 安全审查** | `quick_validate` + `package_skill` 通过 + **纪律 13 发布包安全审查通过**（无密钥/PII/锻造内部文档、无死链）+ **走 SkillHub 发布前还须过 纪律 17 云鼎安全审计（Malicious 硬阻断）** | 不可发布 |
 | **S7** | **内嵌清晰化闸门** | 对 SKILL.md 跑 AI 易读四维（D1–D4）+ 保真闸（references/clarity-fidelity-template.md），清晰化只改「怎么说」不改「做什么」 | 发布后 AI 读不准 |
+| **S8** | **可推广闸门** | **纪律 16** 分发就绪校验：discovery.md 分类映射 + needs_api_key 标注 + intro.md（≤1024 字符跨平台介绍）+ find-skill 触发友好；**以 S7 清晰化产物为 Convention 证据，不重复清晰化** | 平台找不到 / 各平台重写介绍 |
 
 ### 硬规则（违反即退回 S0）
 1. **S1/S2 不可跳过**：未真机跑通的技能，禁止声称"可运行/能赢"。先有真实返回，再谈完成度。
@@ -159,6 +158,7 @@ After every version: `quick_validate.py` + `package_skill.py`. Keep the folder a
 3. **容错来自真机**：接口不稳定（如某端点偶发空返回）只有真跑才发现——发现的坑必须写回 SKILL.md 的容错段落。
 4. **面向真实场景，不写参赛话术**：技能 description / 展示名面向真实使用场景，不写"参赛 / 大赛加分 / 最高级形态 / 切大赛主题"等刻意话术。一场比赛 / 平台只是**验证场（test vehicle）**，不是受众。用户已明确反对为大赛写描述——锻造炉自己的文档若鼓励大赛话术，是自相矛盾。
 5. **S7 内嵌清晰化闸门（v2.9.6 新增）**：每个锻造/升级技能在 S6 之后、发布前，对 SKILL.md 跑 AI 易读四维（D1 降术语 / D2 补示例 / D3 重排结构 / D4 加摘要）+ 保真闸（逐项核对见 `references/clarity-fidelity-template.md`）。任一 ❌ 或 ⚠️ 涉及功能 → 回退 S2/S3 收窄重来。清晰化只改「怎么说」，绝不改「做什么」（纪律 14 保真红线）。
+6. **S8 可推广闸门（v2.9.9 新增）**：S7 之后、发布前，跑 **纪律 16** 分发就绪校验（discovery.md 分类映射 + needs_api_key 标注 + intro.md≤1024 字符跨平台介绍 + find-skill 触发友好）。S8 **直接复用 S7 清晰化后的 SKILL.md 作为 Convention 维度达标证据**，不重复做清晰化。任一分发相关 ❌ 或 ⚠️ → 回退 S7/S2 收窄。详见 §模式 A 锻造循环 S8。
 
 
 > **☁️ 云进化前置：注册 slug（创建期提醒）**：若你想要**跨用户同 slug 的真实反馈闭环**（藏经阁·易筋 信号→蒸馏→提案→重发布），**必须在藏经阁注册本技能 slug**——未注册则云信号无法归因到本技能，闭环不成立。这一步要在「创建技能 / 准备发布」阶段就确认，不要等用户用起来才发现没有反馈回流。注册只需两条命令：`python scripts/forge-register.py register`（发验证码到你的邮箱）→ `python scripts/forge-register.py verify <验证码>` 完成验证，创作者 token 自动存 `<技能目录>/.deploy/cloud_open.json`，**不进发布包**。`forge-publish.py` 在发布前会检测并提示未注册的 slug。
@@ -426,6 +426,8 @@ S7 闸门（强制）在 **S6 校验打包 + 安全审查** 之后、发布前�
 - `references/skill-consolidation.md` — **模式 C 重铸**：数据源、轻量+可选语义聚类、三维打分、报告 schema、合并 SOP、安全护栏。**【v2.7 新增】**
 - `references/clarity-coverage.md` — AI 易读性分类法 C1–C12（内嵌清晰化维度，模式 D 引用）。**【v2.9.6 新增】**
 - `references/clarity-fidelity-template.md` — 保真核对报告模板（清晰化只改"怎么说"不改"做什么"的硬闸）。**【v2.9.6 新增】**
+- `references/promotability-gate.md` — S8 可推广闸门详细检查表 + TRACE 映射 + SkillHub 12 一级类目参考 + 跨平台 intro.md 规范（≤1024 字符）。**【v2.9.9 新增】**
+- `references/yunding-security-audit.md` — 纪律17 云鼎实验室安全审计触发规则 + 三档阈值 + 与纪律13边界 + 常见 Suspicious 整改清单。**【v2.9.9 新增】**
 
 - `references/skill-review-rubric.md` — the measurable bar (10 dims, bands, report template). **The heart of "global best".**
 - `references/skill-types.md` — 5 skill types + per-type forge focus.
@@ -440,6 +442,8 @@ S7 闸门（强制）在 **S6 校验打包 + 安全审查** 之后、发布前�
 - `references/skill-consolidation.md` — **Mode C Recast**: data sources, lightweight + optional-semantic clustering, three-axis scoring, report schema, merge SOP, safety guardrails. **【v2.7 新增】**
 - `references/clarity-coverage.md` — AI-readability taxonomy C1–C12 (embedded-clarity dimensions, Mode D). **【v2.9.6 NEW】**
 - `references/clarity-fidelity-template.md` — fidelity-check report template (clarity changes "how said" not "what done"). **【v2.9.6 NEW】**
+- `references/promotability-gate.md` — S8 promotability gate checklist + TRACE map + SkillHub 12 top categories + cross-platform intro.md spec (≤1024 chars). **【v2.9.9 NEW】**
+- `references/yunding-security-audit.md` — Discipline 17 Yunding audit trigger rules + 3-tier thresholds + boundary with Discipline 13 + common Suspicious remediations. **【v2.9.9 NEW】**
 
 ## 非职责边界（SkillForge 不做什么）/ NON-mandate (what SkillForge does NOT do)
 
@@ -742,6 +746,45 @@ When SkillForge applies clarity transformations (Mode D / S7) to a forged skill,
 - **frontmatter `version` 是单一真相源**：每次迭代，**先 bump frontmatter `version`**，文中所有"vX.Y.Z 新增"标注必须与它一致。novelty-validator 迭代时曾出现"纪律 12 标 v2.7.4 新增，但 frontmatter 仍 2.7.2"的脱节——这是版本管理松懈。
 - **changelog 只写用户侧体验变化**，不泄露开发侧细节（架构/API/内部 Bug）——见纪律 11 ④ 发布器 changelog 铁律。
 - 重大诚实更正（如发现先前误判）必须在对应 references 同步修订，不得留错误知识（见纪律 13 回流）。
+
+---
+
+## 纪律 16 — 可推广闸门（Promotability & Discovery-Readiness Gate）【v2.9.9 新增】
+
+> **为什么需要这道闸**：锻造炉已有 T/R/A/C/E 完整质量纪律（纪律10/13 可信、纪律6 可靠、纪律7 触发、模式D/S7 规范、纪律6 有效），但缺「分发就绪」这一维——技能能不能被平台正确分类、被用户/Agent 在正确场景搜到、且各平台介绍不用重写。腾讯 SkillHub（国内最大 Skill 社区之一）用「TRACE 质量坐标 + 分发坐标」帮用户找到那 20% 好技能；「容易推广的好技能」的最后一环正是分发就绪。本纪律把文章框架固化成 S8 强制闸门，并与 S7 易读化天然衔接（C 规范=AI 读得准；★ 分发=平台找得到）。
+
+S8 位置：S7（清晰化）之后、发布前，强制最后一道闸门。S8 **以 S7 清晰化产物为 Convention 维度达标证据**——不重复清晰化，只补「分发坐标」新增检查 + 整合校验。详细检查表与 SkillHub 12 一级类目参考见 `references/promotability-gate.md`。
+
+### 检查清单（每项 ✅/⚠️/❌，任一分发相关 ❌ 或 ⚠️ → 回退 S7/S2）
+
+1. **T 可信（交叉核对）**：description 与实现一致（无夸大"最牛/第一"）、无蹭品牌、国内可运行、安全红线在（纪律10/13 已覆盖，此处交叉核对不重复建设）。
+2. **A 触发 find-skill 友好**：description 含 "Use when..." + 中文触发关键词；能力边界显式（纪律7）。
+3. **E 开箱即用度**：零配置能用 → 标注"开箱即用"；需 API Key/账号 → 显式声明"需要 API Key"并在安装须知写清配置步骤（对应 SkillHub "需要 API Key" 系统标签）。
+4. **★ 分类映射**：依技能类型+功能，建议 SkillHub 受控分类（一级 + 二级 1-3 + 行业 + 系统标签 needs_api_key），落成 `references/discovery.md`（创作者发布时照此选分类）。
+5. **★ 元数据真实**：name/slug/version 规范、slug 与目录同名、displayName 不蹭品牌、发布前确认 slug 未被占。
+6. **★ 跨平台介绍文案（≤1024 字符）**：技能须有一份适配**豆包 / Claude / 其他平台**的简短介绍 `references/intro.md`，纯介绍、≤1024 字符（含标点与空格，UTF-8 计）。说清"做什么 / 适合谁 / 怎么用"三件事；不依赖 SkillHub 专有术语；与 description 不冲突但可更口语化；中文为主、可双语。各平台详情页/社区帖/README 直接复用，避免每平台重写。
+
+**产出物**：`references/discovery.md`（分发就绪卡）+ `references/intro.md`（跨平台介绍），随包分发，对用户有用、非内部台账，不违反纪律13。
+
+---
+
+## 纪律 17 — 云鼎实验室安全审计闸门（Yunding Security Audit Gate）【v2.9.9 新增】
+
+> **为什么需要这道闸**：技能在发 **SkillHub** 时要过腾讯云鼎实验室安全审查。锻造炉现有 纪律13 只做「发布包脱敏」（删密钥/PII/锻造内部台账），**不做**技能本体是否安全的静态审计（供应链投毒、恶意代码、远程脚本执行、未固定版本依赖等）。一个技能即便脱敏干净，仍可能在 SKILL.md/配套脚本里藏 `curl | bash`、未固定版本全局安装、读取 `~/.ssh` 外送等投毒行为——而这些恰恰是云鼎审查的重点。本纪律把腾讯云鼎出品的 `skills-security-check` 技能作为 **SkillHub 发布路径的强制前置闸门**复用，保证与平台审查同标。
+
+**触发点**：锻造循环在 S6（校验打包+安全审查）之后、走 **SkillHub 发布路径** 之前，强制跑 `skills-security-check` 对发布包（SKILL.md + 配套 scripts/references/ + 所有脚本）做纯静态只读审计。
+
+**判定与处置**：
+- ✅ **Benign（76–100）**：通过，可发布。
+- ⚠️ **Suspicious（31–75）**：附整改说明（固定依赖版本、用 venv、固化远程脚本到本地或加 checksum）后，经用户确认可发布；`forge-publish.py --check` 给出明确警告 + 修复建议。
+- 🔴 **Malicious（0–30）**：**硬阻断**，拒绝发布，回退 S2/S6 重做；报告交付用户。
+
+**与 纪律13 的边界（互补不重叠）**：
+- 纪律13 = **发布包脱敏**（删密钥/PII/台账）——"包里有什么不该带的"。
+- 纪律17 = **技能本体安全**（投毒/恶意代码）——"技能自动干了什么危险的"。
+- S6 段顺序：先脱敏(13) 后审计(17)。
+
+**审计产物**：审计结论记入 `references/security-audit.md`（Benign/Suspicious 结论 + 评分 + 关键发现摘要），随包分发对用户有用（证明技能安全、建立信任）；Malicious 不写结论、直接阻断。触发规则 + 三档阈值 + 常见 Suspicious 整改清单见 `references/yunding-security-audit.md`。发布器 `forge-publish.py` 的 SkillHub 路径前置该闸门（Malicious 硬阻断 / Suspicious 警告）。
 
 ---
 
