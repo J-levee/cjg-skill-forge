@@ -247,11 +247,51 @@ def _find_clawhub_cli() -> Optional[Path]:
 
 
 # ============================================================
-# 平台发布函数
+# SkillHub 平台审核延迟规则（固化 2026-07-30）
+# 发布成功即视为已发布；平台审核有延迟，latestVersion 不会立即变化。
+# 严禁：① 发后立即重查 install/latestVersion（必显旧版）
+#       ② 因 latest 未变而重发 / bump 版本号（触发 VERSION_EXISTS 孤儿版本）
 # ============================================================
+SKILLHUB_REVIEW_NOTE = (
+    "    ── SkillHub 平台审核提示 ──\n"
+    "    ① 已提交 v{}，平台需审核一段时间才会成为默认安装版本（latestVersion 不会立即变化，属正常）。\n"
+    "    ② ⚠️ 切勿因 latest 未变而立即重查 install / latestVersion，或因此重发 / bump 版本号\n"
+    "       —— 会触发 VERSION_EXISTS 孤儿版本，反而无法提升默认版本。\n"
+    "    ③ 请稍后（建议隔数小时 / 隔天）到 SkillHub 创作者后台查看审核是否通过；通过后即成为默认版本。"
+)
+
+
+def yunding_audit_gate(skill_dir: Path) -> tuple:
+    """纪律 17 云鼎实验室安全审计闸门（仅 SkillHub 发布路径前置）。
+    返回 (block: bool, message: str)；block=True 时调用方须拒绝发布。"""
+    sec = skill_dir / "references" / "security-audit.md"
+    if not sec.exists():
+        return (False, "⚠ 未检测到 references/security-audit.md（未跑云鼎 skills-security-check）。"
+                        " 发 SkillHub 前建议先过审计；本次放行。")
+    try:
+        stext = sec.read_text(encoding="utf-8")
+    except Exception:
+        return (False, "⚠ security-audit.md 读取失败，跳过云鼎闸门（非阻断）。")
+    # 判定用语义短语（仅在结论「使用建议」段出现），避免朴素子串误命中报告模板文字
+    if "严禁使用" in stext:
+        return (True, "✗ 云鼎审计结论为 Malicious（0-30分）——硬阻断，拒绝发布。"
+                        " 请回退 S2/S6 重做并消除投毒风险后重试。")
+    if "建议改进后使用" in stext:
+        return (False, "⚠ 云鼎审计结论为 Suspicious（31-75分）——附整改说明经确认后可发；"
+                         " 建议先修复（固定依赖版本/venv/checksum）再发 SkillHub。")
+    if "可以安全使用" in stext:
+        return (False, "✓ 云鼎审计结论为 Benign（76-100分），通过。")
+    return (False, "⚠ security-audit.md 未检出明确结论，跳过云鼎闸门（非阻断）。")
+
+
 def publish_skillhub(skill_dir: Path, slug: str, version: str,
                      changelog: str, dry_run: bool = False) -> bool:
     print(f"  [SkillHub] Publishing {skill_dir.name} v{version} ...")
+    # 纪律 17 云鼎安全审计闸门（SkillHub 发布前置）
+    block, msg = yunding_audit_gate(skill_dir)
+    print(f"  [云鼎审计] {msg}")
+    if block:
+        return False
     ensure_frontmatter(skill_dir, slug, "")
     backups: dict = {}
     backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
@@ -275,6 +315,7 @@ def publish_skillhub(skill_dir: Path, slug: str, version: str,
         if result.returncode == 0:
             out = (result.stdout or result.stderr).strip().lstrip("✓ ").lstrip("✗ ")
             print(f"    ✓ {out}")
+            print(SKILLHUB_REVIEW_NOTE.format(version))
             return True
         else:
             stderr = result.stderr.strip() or result.stdout.strip()
@@ -282,6 +323,11 @@ def publish_skillhub(skill_dir: Path, slug: str, version: str,
                 print(f"    ✗ slug 被 ClawHub 第三方占用（非本账号，无法覆盖）：{stderr}")
                 print(f"       → 请换一个不冲突的 slug（默认从 SKILL.md frontmatter 读取）")
                 return False
+            elif "已存在" in stderr or "VERSION_EXISTS" in stderr:
+                # 固化规则：版本已在平台（审核中/已存在），无需重发，请勿 bump 重复发布
+                print(f"    ⚠️ 版本 {version} 已在平台（审核中或已存在），无需重发，请勿 bump 版本号重复发布。")
+                print(f"       → 稍后到 SkillHub 创作者后台查看审核状态即可。")
+                return True
             elif "频率过高" in stderr or "过于频繁" in stderr:
                 print(f"    ⚠ 触发限流，请稍后重试")
                 return False
@@ -479,6 +525,47 @@ def check_only(skill_dir: Path, slug_hint: str) -> int:
             any_warn = True
     if not any_warn:
         print("    ✓ SkillHub / ClawHub CLI 均可用")
+
+    # ---- S8 可推广闸门校验（纪律 16，警告不阻塞）----
+    print(f"\n  S8 可推广闸门校验 (纪律 16, 分发就绪):")
+    refs = skill_dir / "references"
+    disc = refs / "discovery.md"
+    intro = refs / "intro.md"
+    if not disc.exists():
+        print("    ⚠ references/discovery.md 缺失（建议分类映射未落，发布后平台难正确归类）")
+    else:
+        dtext = disc.read_text(encoding="utf-8")
+        if "needs_api_key" not in dtext:
+            print("    ⚠ discovery.md 未声明 needs_api_key 系统标签")
+        else:
+            print("    ✓ discovery.md 存在且含 needs_api_key 标注")
+    if not intro.exists():
+        print("    ⚠ references/intro.md 缺失（跨平台 ≤1024 字符介绍未提供）")
+    else:
+        itext = intro.read_text(encoding="utf-8")
+        n = len(itext)
+        if n > 1024:
+            print(f"    ✗ intro.md 字符数 {n} 超出 ≤1024 上限（UTF-8 计，含标点空格）")
+            ok = False
+        else:
+            print(f"    ✓ intro.md 存在，字符数 {n}/1024（≤1024 跨平台介绍）")
+
+    # ---- 纪律 17 云鼎安全审计状态（SkillHub 路径参考，警告不阻塞）----
+    print(f"\n  纪律 17 云鼎安全审计状态:")
+    sec = refs / "security-audit.md"
+    if not sec.exists():
+        print("    ⚠ references/security-audit.md 缺失（未跑云鼎 skills-security-check；发 SkillHub 前建议先过审计）")
+    else:
+        stext = sec.read_text(encoding="utf-8")
+        if "严禁使用" in stext:
+            print("    ✗ security-audit.md 结论为 Malicious —— SkillHub 发布将被硬阻断，须回退重做")
+            ok = False
+        elif "建议改进后使用" in stext:
+            print("    ⚠ security-audit.md 结论为 Suspicious —— 附整改说明经确认后可发（SkillHub 路径建议先修）")
+        elif "可以安全使用" in stext:
+            print("    ✓ security-audit.md 结论为 Benign（云鼎审计通过）")
+        else:
+            print("    ⚠ security-audit.md 未检出明确结论（Benign/Suspicious/Malicious），请确认")
 
     print(f"\n{'='*60}")
     print(f"{'✅ 校验通过，可发布' if ok else '⚠️ 校验有缺失，请先补全 frontmatter'}")
