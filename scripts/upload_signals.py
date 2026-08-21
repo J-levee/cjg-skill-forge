@@ -29,8 +29,8 @@ import time
 import urllib.error
 import urllib.request
 
-# 兜底内置端点（与 cloud_config.json 缺失时回退）
-FALLBACK_INGEST_BASE = "https://1318491188-fpwsv5k3eh.ap-guangzhou.tencentscf.com"
+# 端点完全来自外部配置（cloud_config.json / 环境变量 CJG_INGEST_URL），
+# 代码中不硬编码任何 URL —— 配置缺失则跳过云端上传（本地记录照常）。
 ANON_PATH = "/ingest/anon"
 
 # 死信阈值：连续多少轮"有未传行 + 服务端持续报错 + 0 成功"触发
@@ -42,6 +42,33 @@ BACKOFF_BASE = 2.0
 
 # 标准白名单字段（本地 → 云端）
 EVENTS = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis"}
+
+
+def resolve_ingest_url(skill_dir):
+    """云端端点完全来自外部配置，不在代码中硬编码。
+
+    优先级：环境变量 CJG_INGEST_URL → 技能目录 cloud_config.json(ingest_url)
+    → 创作者本机密钥目录 cloud_config.json(ingest_url)。都缺失返回 None（跳过云端上传）。
+    """
+    env = os.environ.get("CJG_INGEST_URL")
+    if env:
+        return env.strip().rstrip("/") + ANON_PATH
+    cands = [
+        os.path.join(skill_dir, "cloud_config.json"),
+        os.path.expanduser("~/.workbuddy/secrets/cjg-evo/cloud_config.json"),
+    ]
+    for cc in cands:
+        if os.path.exists(cc):
+            try:
+                with open(cc, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                u = (cfg.get("ingest_url") or "").strip()
+                if u:
+                    return u.rstrip("/") + ANON_PATH
+            except Exception:
+                pass
+    return None
+
 LAYERS = {"L1", "L2", "L3", "L4", "L5", "L6", "L7"}
 
 
@@ -221,18 +248,11 @@ def process_skill(skill_dir, dry_run=False):
 
     anon_id = read_state_file(os.path.join(skill_dir, ".anon_id")) or ""
 
-    # 读取端点
-    ingest_base = FALLBACK_INGEST_BASE
-    cc = os.path.join(skill_dir, "cloud_config.json")
-    if os.path.exists(cc):
-        try:
-            with open(cc, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            if isinstance(cfg, dict) and cfg.get("ingest_url"):
-                ingest_base = cfg["ingest_url"].rstrip("/")
-        except Exception:
-            pass
-    url = ingest_base + ANON_PATH
+    # 读取端点（仅来自外部配置 / 环境变量；代码中不硬编码任何 URL）
+    url = resolve_ingest_url(skill_dir)
+    if not url:
+        log(f"[{name}] 未配置云端端点（缺 cloud_config.json 且无 CJG_INGEST_URL）→ 跳过云端上传（本地记录照常）")
+        return 0, []
 
     uploaded = load_uploaded(os.path.join(skill_dir, ".uploaded_ids.txt"))
     errored = load_uploaded(os.path.join(skill_dir, ".errored_ids.txt"))

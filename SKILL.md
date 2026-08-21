@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 2.9.11
+version: 2.9.12
 description: |
   技能锻造炉 / Skill Forge —— 元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。锻造模式：带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、不说谎的说服、生产签批、真机验证；审视模式：10 维加权评分尺，给任何技能（含它自己）打 Thin/Solid/Excellent/Global-Best；重铸模式（Mode C）：审计并整合本机重叠技能，给出重铸计划与推荐基座。当你要创建、升级、审计或整理（合并同类）技能时，用它。
 
@@ -37,32 +37,32 @@ A meta-skill with four modes — **Forge** (build/upgrade skills), **Review** (a
 >
 > 🔗 **Want the cross-user feedback loop?** First say "开启云同步", then register this skill's slug (one command: `scripts/forge-register.py register` → `verify`), see §MODE A.5.
 
-> **⚙️ 上传定时任务（仅在你「开启云同步」后安装）**：说「开启云同步」后，AI 会运行 `python scripts/install_signal_cron.py --enable-cloud-upload`（幂等——已存在则跳过）创建「每日 23:30」定时任务，确定性批量跑 `upload_signals.py` 匿名回传平台。**默认不挂任何后台任务**；仅显式开启云同步才装。
-> 关闭：`python scripts/install_signal_cron.py --uninstall`（或说「别传了」由 AI 代为执行）。
+> **⚙️ 云端定时同步（可选增强包）**：基础技能包**不含任何定时任务 / 后台调度代码**（零后台、应用市场安全审核友好）。需要每天自动回传的，单独安装「藏经阁云端增强包（`cloud-enhancement/`）」后说「开启云同步」，AI 会运行增强包的 `install_signal_cron.py --enable-cloud-upload`（幂等）创建「每日 23:30」任务批量跑 `upload_signals.py` 匿名回传。**不安装增强包则无后台任务**，仅本地记录。
+> 关闭：`python cloud-enhancement/install_signal_cron.py --uninstall`（或说「别传了」由 AI 代为执行）。
 
-> **⚙️ Upload task (installed only after you "开启云同步")**: after you say "开启云同步", the AI runs `python scripts/install_signal_cron.py --enable-cloud-upload` (idempotent — skips if present) to create a daily 23:30 task that runs `upload_signals.py` to upload `signals-log.jsonl` anonymously. **No background task is added by default** — it's created only on explicit cloud opt-in.
-> Off: `python scripts/install_signal_cron.py --uninstall` (or say "别传了" and let the AI run it).
+> **⚙️ Cloud scheduled sync (optional addon)**: the base skill package **ships NO scheduled-task / background-scheduler code** (zero background, app-market security-review friendly). To enable daily auto-upload, install the separate "藏经阁云端增强包 (cloud-enhancement/)" addon, then say "开启云同步" — the AI runs the addon's `install_signal_cron.py --enable-cloud-upload` (idempotent) to create a daily 23:30 task that runs `upload_signals.py` to upload anonymously. **Without the addon there is no background task** — only local logging.
+> Off: `python cloud-enhancement/install_signal_cron.py --uninstall` (or say "别传了" and let the AI run it).
 
 > **🔧 发射执行（每次锻造/审视/重铸/清晰化收尾必须做 · 末步硬纪律）**：
 > 七层应答结束前，必须执行 `references/signals.md` 末步 one-liner，向本技能目录 `signals-log.jsonl` 追加一行方法层信号（**含 `signal_id` 幂等键**）——除非用户说「别记了」。
-> **云端上传不在此处做**：由 WorkBuddy 每日 23:30 的 cron 自动跑 `scripts/upload_signals.py` 确定性批量上传（零密钥、失败静默、断点续传、防重复）。无需你手动 POST。
+> **云端上传不在此处做**：由「云端增强包」每日 23:30 的定时任务自动跑 `scripts/upload_signals.py` 确定性批量上传（零密钥、失败静默、断点续传、防重复）。无需你手动 POST。
 > **采集时显性标记（A5）**：若本轮 one-liner 成功写入 `signal_id`，在应答末追加一行轻量可见光标（例：`📊 已记录 1 条进化信号 · 方法层 L3 · 有用 — 说"查看我的信号"看全部`）；首次附「只记方法名，绝不记你说了什么」；说"别提示了"可关。详见 `references/signals.md` §四。
 > one-liner 与字段语义、L1–L7 层码见 `references/signals.md`。
 
 > **🔧 Emission execution (mandatory last step of every forge/review/recast/clarity · hard rule)**:
 > Before ending the response, run the one-liner in `references/signals.md` to append one method-layer signal line (with `signal_id` idempotency key) to `signals-log.jsonl` in this skill's dir — unless the user said "别记了".
-> **Cloud upload is NOT done here**: a daily 23:30 WorkBuddy cron runs `scripts/upload_signals.py` to upload in batches (zero-key, fail-silent, resumable, dedup). No manual POST needed.
+> **Cloud upload is NOT done here**: the cloud-enhancement addon's daily 23:30 scheduled task runs `scripts/upload_signals.py` to upload in batches (zero-key, fail-silent, resumable, dedup). No manual POST needed.
 > See `references/signals.md` for the one-liner and field semantics (L1–L7 layer codes).
 
-> **🕐 关于那个「每天 23:30 自动跑」的任务（仅在开启云同步后才有）**
-> 只有你说了「开启云同步」，本机才会挂一个每日定时任务。它只做一件事：把你用锻造炉时产生的「方法层反馈标签」（比如"这一步很有用""这里我卡住了"）匿名传到藏经阁平台，用来让锻造炉越用越准。
+> **🕐 关于那个「每天 23:30 自动跑」的任务（可选 · 仅装了云端增强包且开启云同步后才有）**
+> 只有你装了「云端增强包」并说了「开启云同步」，本机才会挂一个每日定时任务。它只做一件事：把你用锻造炉时产生的「方法层反馈标签」（比如"这一步很有用""这里我卡住了"）匿名传到藏经阁平台，用来让锻造炉越用越准。
 > · 它**不读你的对话内容、不碰你的任何文件、不知道你是谁**（用一串随机匿名 ID 代替）；
 > · 只在你本机产生新反馈时才上传，没新反馈就静默跳过；
 > · 失败会默默重试，不弹窗、不打扰。
 > 你随时可以关掉它（说"别传了"）。**它是可选的**——不开启云同步，你的本地记录照常、只是不同步到平台。
 
-> **🕐 About that "daily 23:30 background task" (only if you enable cloud sync)**
-> Only after you say "开启云同步" does this skill add a daily scheduled task. It does exactly one thing: anonymously upload the method-layer feedback tags you generate (e.g. "this step was useful", "I got stuck here") to the 藏经阁·易筋 platform, so the forge keeps improving.
+> **🕐 About that "daily 23:30 background task" (optional · only if you installed the cloud-enhancement addon AND enabled cloud sync)**
+> Only after you install the cloud-enhancement addon and say "开启云同步" does this skill add a daily scheduled task. It does exactly one thing: anonymously upload the method-layer feedback tags you generate (e.g. "this step was useful", "I got stuck here") to the 藏经阁·易筋 platform, so the forge keeps improving.
 > · It **never reads your conversation content, never touches your files, and never knows who you are** (a random anonymous ID is used instead);
 > · It only uploads when new feedback exists locally; if none, it silently skips;
 > · On failure it retries quietly — no popups, no interruptions.

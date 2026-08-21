@@ -29,7 +29,7 @@ import urllib.error
 from pathlib import Path
 
 SKILLS_BASE = Path.home() / ".workbuddy" / "skills"
-DEFAULT_REGISTER_URL = "https://1318491188-1yxx8sqtw1.ap-guangzhou.tencentscf.com"
+# 注册端点只来自外部配置（环境变量 CJG_REGISTER_URL / cloud_config.json），不硬编码。
 DEPLOY_DIR = ".deploy"
 CLOUD_OPEN_FILE = "cloud_open.json"
 CREATOR_EMAIL_HINT = "252005371@qq.com"  # 创作者运营邮箱（默认，可用 --email 覆盖）
@@ -104,15 +104,23 @@ def _save_open(skill_dir: Path, data: dict):
 
 
 def _register_url_of(skill_dir: Path) -> str:
-    cc = skill_dir / "cloud_config.json"
-    if cc.exists():
+    # 端点只来自外部配置（环境变量 / cloud_config.json），不在代码中硬编码。
+    env = os.environ.get("CJG_REGISTER_URL")
+    if env:
+        return env.strip().rstrip("/")
+    cands = [
+        skill_dir / "cloud_config.json",
+        Path.home() / ".workbuddy" / "secrets" / "cjg-evo" / "cloud_config.json",
+    ]
+    for cc in cands:
         try:
-            data = json.loads(cc.read_text(encoding="utf-8"))
-            if data.get("register_url"):
-                return data["register_url"]
+            if cc.exists():
+                data = json.loads(cc.read_text(encoding="utf-8"))
+                if data.get("register_url"):
+                    return data["register_url"]
         except Exception:
             pass
-    return DEFAULT_REGISTER_URL
+    sys.exit("✗ 未找到 register_url：请设置环境变量 CJG_REGISTER_URL，或在 cloud_config.json 中提供 register_url")
 
 
 def resolve_skill_dir(args) -> Path:

@@ -50,8 +50,7 @@ SKILLS_BASE = Path.home() / ".workbuddy" / "skills"
 FORGE_SCRIPTS = Path(__file__).resolve().parent
 # 云端接入配置（方案C·零密钥）：cloud_config.json 仅含公网 URL，不含 token（SkillHub 拒绝点号隐藏文件）
 CLOUD_CONFIG_FILE = "cloud_config.json"
-DEFAULT_INGEST_URL = "https://1318491188-fpwsv5k3eh.ap-guangzhou.tencentscf.com"
-DEFAULT_REGISTER_URL = "https://1318491188-1yxx8sqtw1.ap-guangzhou.tencentscf.com"
+# 端点全部来自 cloud_config.json（随包分发，仅公网 URL、零密钥）；此处不硬编码任何 URL。
 DEFAULT_PROPOSAL_URL = None  # 部署 cjg-proposal 后由 --proposal-url 注入；旧包留空兼容
 SKILLHUB_API_HOST = "https://api.skillhub.cn"
 SKILLHUB_CREDENTIALS = Path.home() / ".skillhub" / "credentials.json"
@@ -59,7 +58,8 @@ SKILLHUB_PYTHON = "python"
 SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
                           ".cloud_optin", ".optin", ".anon_id",
                           ".errored_ids.txt", ".upload_zero_rounds",
-                          ".uploaded_ids.txt", "signals-log.jsonl"]
+                          ".uploaded_ids.txt", "signals-log.jsonl",
+                          "cloud-enhancement"]
 EMAIL_FIELD_HINTS = ("email", "mail", "_email", "contact_email")
 _GENERATED = "__GENERATED__"
 
