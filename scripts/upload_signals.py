@@ -70,7 +70,7 @@ def write_state_file(path, value):
 
 
 def bootstrap(skill_dir):
-    """确定性补齐状态文件：.optin=on / .anon_id=uuid / .cloud_optin=on（缺失才建）。"""
+    """确定性补齐状态文件：.optin=on / .anon_id=uuid / .cloud_optin=off（缺失才建；云端默认关，需显式开启云同步）。"""
     created = []
     optin = os.path.join(skill_dir, ".optin")
     if not os.path.exists(optin):
@@ -83,7 +83,7 @@ def bootstrap(skill_dir):
             created.append(".anon_id")
     cloud = os.path.join(skill_dir, ".cloud_optin")
     if not os.path.exists(cloud):
-        if write_state_file(cloud, "on"):
+        if write_state_file(cloud, "off"):
             created.append(".cloud_optin")
     return created
 
@@ -158,7 +158,11 @@ def build_payload(obj, anon_id_fallback):
 
 
 def post_signal(url, payload, timeout=10):
-    """返回 (status, ok_bool, category)。category: 'ok' / 'retry' / 'stop'(429) / 'perm'(4xx) / 'net'。"""
+    """返回 (status, ok_bool, category, anon_id)。
+
+    anon_id：服务端签发的稳定匿名 ID（仅 2xx 且有 body 时非空）。
+    客户端据此回写 .anon_id 文件，使同机后续上传复用 → 人数去重准确。
+    """
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -169,25 +173,30 @@ def post_signal(url, payload, timeout=10):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             status = resp.getcode()
+            anon_id = ""
             if 200 <= status < 300:
-                return status, True, "ok"
+                try:
+                    anon_id = (json.loads(resp.read().decode("utf-8")) or {}).get("anon_id", "")
+                except Exception:
+                    anon_id = ""
+                return status, True, "ok", anon_id
             if status == 429:
-                return status, False, "stop"
+                return status, False, "stop", ""
             if 400 <= status < 500:
-                return status, False, "perm"
-            return status, False, "retry"  # 5xx 等
+                return status, False, "perm", ""
+            return status, False, "retry", ""  # 5xx 等
     except urllib.error.HTTPError as e:
         status = e.code
         if status == 429:
-            return status, False, "stop"
+            return status, False, "stop", ""
         if 400 <= status < 500:
-            return status, False, "perm"
-        return status, False, "retry"
-    except (urllib.error.URLError, TimeoutError, OSError, ConnectionError) as e:
+            return status, False, "perm", ""
+        return status, False, "retry", ""
+    except (urllib.error.URLError, TimeoutError, OSError, ConnectionError):
         # 网络不可达 / 超时 / DNS 失败 → 离线排队，不计入死信
-        return -1, False, "net"
+        return -1, False, "net", ""
     except Exception:
-        return -2, False, "net"
+        return -2, False, "net", ""
 
 
 def process_skill(skill_dir, dry_run=False):
@@ -204,11 +213,11 @@ def process_skill(skill_dir, dry_run=False):
     cloud_optin = read_state_file(os.path.join(skill_dir, ".cloud_optin"))
     if cloud_optin == "off":
         log(f"[{name}] .cloud_optin=off，跳过云端上传（本地记录照常）")
-        return 0
+        return 0, []
 
     log_path = os.path.join(skill_dir, "signals-log.jsonl")
     if not os.path.exists(log_path):
-        return 0
+        return 0, []
 
     anon_id = read_state_file(os.path.join(skill_dir, ".anon_id")) or ""
 
@@ -233,10 +242,11 @@ def process_skill(skill_dir, dry_run=False):
         with open(log_path, "rb") as f:
             raw_lines = f.read().split(b"\n")
     except Exception:
-        return 0
+        return 0, []
 
     pending_before = 0
     uploaded_now = 0
+    uploaded_details = []  # 本次成功上传的 (method_layer, event) 明细，用于给用户列清楚
     conn_failed = 0
     server_failed = 0
     dead_candidates = []  # 未传且未永久失败的行（原始 bytes）
@@ -284,14 +294,15 @@ def process_skill(skill_dir, dry_run=False):
         # 上传 + 重试
         ok = False
         category = "net"
+        returned_anon = ""
         for attempt in range(MAX_RETRY + 1):
-            status, ok, category = post_signal(url, payload)
+            status, ok, category, returned_anon = post_signal(url, payload)
             if ok:
                 break
             if category == "stop":
                 # 429：立即停本轮
                 log(f"[{name}] 收到 429 限流，停止本轮批量（下轮续传）")
-                return uploaded_now
+                return uploaded_now, uploaded_details
             if category == "perm":
                 # 4xx 永久失败
                 server_failed += 1
@@ -314,6 +325,12 @@ def process_skill(skill_dir, dry_run=False):
         if ok:
             append_uploaded(os.path.join(skill_dir, ".uploaded_ids.txt"), cid)
             uploaded_now += 1
+            uploaded_details.append((method_layer, event))
+            # A-fix：回存服务端签发的稳定 anon_id（覆盖 bootstrap 的裸 uuid4）；
+            # 同机后续上传复用 → COUNT(DISTINCT anon_id) 才能正确去重人数。
+            if returned_anon and returned_anon != anon_id:
+                anon_id = returned_anon
+                write_state_file(os.path.join(skill_dir, ".anon_id"), returned_anon)
         else:
             # 未成功：留本地（不在 uploaded/errored 中），下轮续传
             dead_candidates.append(raw)
@@ -359,7 +376,7 @@ def process_skill(skill_dir, dry_run=False):
                 log(f"[{name}] 死信处理失败: {e}")
         write_state_file(zero_rounds_path, str(zr))
 
-    return uploaded_now
+    return uploaded_now, uploaded_details
 
 
 def main():
@@ -379,6 +396,7 @@ def main():
 
     total = 0
     skills_scanned = 0
+    breakdown = {}  # 技能名 -> [(method_layer, event), ...]
     for entry in sorted(os.listdir(base)):
         skill_dir = os.path.join(base, entry)
         if not os.path.isdir(skill_dir):
@@ -386,12 +404,27 @@ def main():
         res = process_skill(skill_dir, dry_run=args.dry_run)
         if res is not None:
             skills_scanned += 1
-            total += res
+            cnt, details = res
+            total += cnt
+            if details:
+                breakdown[entry] = details
 
+    # 给用户看清楚"本次到底传了什么"（全部是方法层标签，零对话内容/零个人信息）
     if args.dry_run:
         log(f"dry-run 完成：扫描 {skills_scanned} 个信号技能，本应上传 {total} 条")
     else:
         log(f"完成：扫描 {skills_scanned} 个信号技能，本次成功上传 {total} 条")
+        if total == 0:
+            log("本轮无新增信号需上传（昨天没产生新反馈，任务已检查完毕）")
+        else:
+            log("本次上传明细（全部为方法层标签，不含任何对话内容或个人隐私）：")
+            for name, details in breakdown.items():
+                # 按 (层码, 事件) 聚合计数
+                agg = {}
+                for layer, ev in details:
+                    agg[(layer, ev)] = agg.get((layer, ev), 0) + 1
+                parts = "、".join(f"{layer}·{ev}×{c}" for (layer, ev), c in sorted(agg.items()))
+                log(f"  {name}: {len(details)} 条（{parts}）")
     return 0
 
 

@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 2.9.9
+version: 2.9.11
 description: |
   技能锻造炉 / Skill Forge —— 元技能：从零打造或重铸一个「全球最牛」的 WorkBuddy 技能，并让它在用户使用中持续进化。锻造模式：带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、不说谎的说服、生产签批、真机验证；审视模式：10 维加权评分尺，给任何技能（含它自己）打 Thin/Solid/Excellent/Global-Best；重铸模式（Mode C）：审计并整合本机重叠技能，给出重铸计划与推荐基座。当你要创建、升级、审计或整理（合并同类）技能时，用它。
 
@@ -19,33 +19,54 @@ A meta-skill with four modes — **Forge** (build/upgrade skills), **Review** (a
 
 ---
 
-## 零、进化燃料 · 安装即开 / Evolution Fuel · install-time ON
+## 零、进化燃料 · 本地即开 · 云端需显式开启 / Evolution Fuel · local ON · cloud opt-in
 
-> **📋 安装须知**：本技能安装后默认开启：
-> - **本地记录**：每次锻造/审视后自动记录方法层标签（哪些 Discipline 最有用、用户在哪步给了反馈、哪个技能类型最常见），留在你本机。
-> - **云端上传（零密钥）**：检测到本技能含 `cloud_config.json`（仅公网 URL、无 token）即自动经 `POST {ingest_url}/ingest/anon` 匿名回传反馈信号（6 类：`helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`，由 Tier 0 对话信号推断：采纳=helpful、纠正=unhelpful、卡住=confusion 等），与跨用户同 slug 聚合，让锻造炉自身越用越牛。创作者查看提案的 token 另由本地 `.deploy/cloud_open.json` 提供，**不进包、不影响上传**。
+> **📋 安装须知**：本技能安装后**本地记录默认开启**（零原文零身份，留你本机）：
+> - **本地记录**：每次锻造/审视后自动记录方法层标签（哪些 Discipline 最有用、用户在哪步给了反馈、哪个技能类型最常见），留在你本机，用于本技能自我迭代。
+> - **云端上传（零密钥 · 默认关）**：检测到本技能含 `cloud_config.json`（仅公网 URL、无 token）时，需你**显式说"开启云同步"**才会匿名回传反馈信号（6 类：`helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`，由 Tier 0 对话信号推断：采纳=helpful、纠正=unhelpful、卡住=confusion 等），与跨用户同 slug 聚合，让锻造炉越用越牛。创作者查看提案的 token 另由本地 `.deploy/cloud_open.json` 提供，**不进包、不影响上传**。
 >
-> 如不需云端上传，随时说「别传了」即可关闭（本地记录不受影响）。如不需本地记录，说「别记了」即可全关。
+> 云端默认不传；想参与跨用户进化，说「开启云同步」即可（随时「别传了」关闭，本地记录不受影响）。如不需本地记录，说「别记了」即可全关。
 >
-> 🔗 **想拿到跨用户真实反馈闭环？** 还需注册本技能 slug（一键：`scripts/forge-register.py register` → `verify`），详见 §模式 A.5。
+> 🔗 **想拿到跨用户真实反馈闭环？** 先「开启云同步」，再注册本技能 slug（一键：`scripts/forge-register.py register` → `verify`），详见 §模式 A.5。
 
-> **📋 Install notice**: This skill is ON by default after install:
-> - **Local log**: after each forge/review, automatically records method-layer tags (which Disciplines helped most, where the user gave feedback, which skill type was most common), kept on your machine.
-> - **Cloud upload (zero-key)**: when this skill ships `cloud_config.json` (public URLs only, no token), it auto-uploads feedback signals via `POST {ingest_url}/ingest/anon` anonymously (6 types: `helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`, inferred from Tier 0 conversation signals), aggregated across users by slug, so the forge itself keeps improving. The creator's token for reviewing proposals comes from local `.deploy/cloud_open.json` — **not in the package, does not affect upload**.
+> **📋 Install notice**: After install, **local logging is ON by default** (zero content, zero identity, stays on your machine):
+> - **Local log**: after each forge/review, automatically records method-layer tags (which Disciplines helped most, where the user gave feedback, which skill type was most common), kept on your machine, for the skill's own iteration.
+> - **Cloud upload (zero-key · OFF by default)**: when this skill ships `cloud_config.json` (public URLs only, no token), it uploads feedback signals via `POST {ingest_url}/ingest/anon` anonymously **only after you explicitly say "开启云同步"** (6 types: `helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis`, inferred from Tier 0 conversation signals), aggregated across users by slug, so the forge keeps improving. The creator's token for reviewing proposals comes from local `.deploy/cloud_open.json` — **not in the package, does not affect upload**.
 >
-> Say "别传了" (stop uploading) anytime to turn cloud off (local log unaffected). Say "别记了" (stop logging) to turn everything off.
+> Cloud is off by default; say "开启云同步" to join cross-user evolution (say "别传了" anytime to turn cloud off, local log unaffected). Say "别记了" (stop logging) to turn everything off.
 >
-> 🔗 **Want the cross-user feedback loop?** Also register this skill's slug (one command: `scripts/forge-register.py register` → `verify`), see §MODE A.5.
+> 🔗 **Want the cross-user feedback loop?** First say "开启云同步", then register this skill's slug (one command: `scripts/forge-register.py register` → `verify`), see §MODE A.5.
+
+> **⚙️ 上传定时任务（仅在你「开启云同步」后安装）**：说「开启云同步」后，AI 会运行 `python scripts/install_signal_cron.py --enable-cloud-upload`（幂等——已存在则跳过）创建「每日 23:30」定时任务，确定性批量跑 `upload_signals.py` 匿名回传平台。**默认不挂任何后台任务**；仅显式开启云同步才装。
+> 关闭：`python scripts/install_signal_cron.py --uninstall`（或说「别传了」由 AI 代为执行）。
+
+> **⚙️ Upload task (installed only after you "开启云同步")**: after you say "开启云同步", the AI runs `python scripts/install_signal_cron.py --enable-cloud-upload` (idempotent — skips if present) to create a daily 23:30 task that runs `upload_signals.py` to upload `signals-log.jsonl` anonymously. **No background task is added by default** — it's created only on explicit cloud opt-in.
+> Off: `python scripts/install_signal_cron.py --uninstall` (or say "别传了" and let the AI run it).
 
 > **🔧 发射执行（每次锻造/审视/重铸/清晰化收尾必须做 · 末步硬纪律）**：
 > 七层应答结束前，必须执行 `references/signals.md` 末步 one-liner，向本技能目录 `signals-log.jsonl` 追加一行方法层信号（**含 `signal_id` 幂等键**）——除非用户说「别记了」。
 > **云端上传不在此处做**：由 WorkBuddy 每日 23:30 的 cron 自动跑 `scripts/upload_signals.py` 确定性批量上传（零密钥、失败静默、断点续传、防重复）。无需你手动 POST。
+> **采集时显性标记（A5）**：若本轮 one-liner 成功写入 `signal_id`，在应答末追加一行轻量可见光标（例：`📊 已记录 1 条进化信号 · 方法层 L3 · 有用 — 说"查看我的信号"看全部`）；首次附「只记方法名，绝不记你说了什么」；说"别提示了"可关。详见 `references/signals.md` §四。
 > one-liner 与字段语义、L1–L7 层码见 `references/signals.md`。
 
 > **🔧 Emission execution (mandatory last step of every forge/review/recast/clarity · hard rule)**:
 > Before ending the response, run the one-liner in `references/signals.md` to append one method-layer signal line (with `signal_id` idempotency key) to `signals-log.jsonl` in this skill's dir — unless the user said "别记了".
 > **Cloud upload is NOT done here**: a daily 23:30 WorkBuddy cron runs `scripts/upload_signals.py` to upload in batches (zero-key, fail-silent, resumable, dedup). No manual POST needed.
 > See `references/signals.md` for the one-liner and field semantics (L1–L7 layer codes).
+
+> **🕐 关于那个「每天 23:30 自动跑」的任务（仅在开启云同步后才有）**
+> 只有你说了「开启云同步」，本机才会挂一个每日定时任务。它只做一件事：把你用锻造炉时产生的「方法层反馈标签」（比如"这一步很有用""这里我卡住了"）匿名传到藏经阁平台，用来让锻造炉越用越准。
+> · 它**不读你的对话内容、不碰你的任何文件、不知道你是谁**（用一串随机匿名 ID 代替）；
+> · 只在你本机产生新反馈时才上传，没新反馈就静默跳过；
+> · 失败会默默重试，不弹窗、不打扰。
+> 你随时可以关掉它（说"别传了"）。**它是可选的**——不开启云同步，你的本地记录照常、只是不同步到平台。
+
+> **🕐 About that "daily 23:30 background task" (only if you enable cloud sync)**
+> Only after you say "开启云同步" does this skill add a daily scheduled task. It does exactly one thing: anonymously upload the method-layer feedback tags you generate (e.g. "this step was useful", "I got stuck here") to the 藏经阁·易筋 platform, so the forge keeps improving.
+> · It **never reads your conversation content, never touches your files, and never knows who you are** (a random anonymous ID is used instead);
+> · It only uploads when new feedback exists locally; if none, it silently skips;
+> · On failure it retries quietly — no popups, no interruptions.
+> You can turn it off anytime ("别传了"). **It's optional** — without cloud sync, your local log still works, it just isn't synced to the platform.
 
 ## 概述 / Overview
 
@@ -486,9 +507,11 @@ Every skill forged by SkillForge MUST have evolution fuel (local signal collecti
 **Local version** (default — zero cloud, zero friction):
 
 ```markdown
-## 零、进化燃料 · 安装即开
+## 零、进化燃料 · 本地即开
 
 > **📋 安装须知**：本技能安装后默认开启「进化燃料」——每次使用后自动记录方法层标签（只记方法名，绝不记你问了什么、你是谁），留在你本机用于自我迭代。如不需此服务，随时说「别记了」即可关闭。
+>
+> 📊 透明度：说"查看我的信号"看它记了什么、"我的技能成长"看这段时间的进展、"删除我的信号"清空本机记录（只记方法名，零原文）。
 ```
 
 **云端版**（含 `cloud_config.json` 仅公网 URL、零密钥——增加云端匿名上传）：
@@ -496,13 +519,15 @@ Every skill forged by SkillForge MUST have evolution fuel (local signal collecti
 **Cloud version** (ships `cloud_config.json` with public URLs only, zero-key — adds anonymous cloud upload):
 
 ```markdown
-## 零、进化燃料 · 安装即开（云端版）
+## 零、进化燃料 · 本地即开 · 云端需显式开启
 
-> **📋 安装须知**：本技能为**云端版**，安装后默认开启：
+> **📋 安装须知**：本技能安装后**本地记录默认开启**（只记方法名，零原文零身份，留你本机），用于本技能自我迭代：
 > - **本地记录**：每次使用后自动记录方法层标签（只记方法名，零原文零身份），留在你本机。
-> - **云端上传（零密钥）**：反馈信号（helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis，由 Tier 0 对话信号推断）自动经 `POST {ingest_url}/ingest/anon` 匿名回传藏经阁·易筋平台，与跨用户同 slug 聚合，让技能越用越牛。
+> - **云端上传（零密钥 · 默认关）**：含 `cloud_config.json`（仅公网 URL、零密钥）时，需你**显式说"开启云同步"**才把反馈信号（helpful/unhelpful/confusion/suggestion/abandoned/misdiagnosis，由 Tier 0 对话信号推断）匿名回传藏经阁·易筋平台，与跨用户同 slug 聚合，让技能越用越牛。
 >
-> 如不需云端上传，随时说「别传了」即可关闭（本地记录不受影响）。如不需本地记录，说「别记了」即可全关。
+> 云端默认不传；想参与跨用户进化，说「开启云同步」即可（随时「别传了」关闭，本地记录不受影响）。如不需本地记录，说「别记了」即可全关。
+>
+> 📊 透明度：说"查看我的信号"看它记了什么、"我的技能成长"看这段时间的进展、"删除我的信号"清空本机记录（只记方法名，零原文）。
 ```
 
 **规则 / Rules**:
@@ -512,14 +537,14 @@ Every skill forged by SkillForge MUST have evolution fuel (local signal collecti
 3. **首次对话提醒**：agent 在首次交互提一句（透明，不是请求许可）。
 4. **易退出**：用户说"别记了"/"关掉"/"turn off"→ 立刻停，零摩擦。说"再开"可恢复。
 5. **零 PII**：只记方法层标签（哪个方法、置信度、被纠正没），绝不记内容或身份。
-6. **云端版双 opt-in**：本地燃料始终安装即开。对**云端版**技能，云端上传也安装即开（选云端版 = 授权，安装须知透明告知）。对**纯本地版**，云端上传不存在。用户随时"别传了"关云端上传（本地不受影响）。
+6. **云端版显式 opt-in**：本地燃料始终安装即开。对**云端版**技能，云端上传**默认关**，需用户显式说"开启云同步"才上传（安装须知透明告知，绝不默认上传）。对**纯本地版**，云端上传不存在。用户随时"别传了"关云端上传（本地不受影响）。
 
 1. **Default ON at install**: `.optin` defaults to `on` when skill is installed. No opt-in gate, no permission request — just transparent notice.
 2. **Install-time notice**: The notice above MUST appear prominently in SKILL.md (§零 or equivalent), visible when user reads the skill at install.
 3. **First-conversation reminder**: Agent mentions once at first interaction (transparency, not permission).
 4. **Easy opt-out**: User says "别记了" / "关掉" / "turn off" → immediately stops, no friction. Can re-enable with "再开".
 5. **Zero PII**: Only method-layer tags (which method, confidence, corrected?), never content or identity.
-6. **Cloud version dual-optin**: Local fuel is always install-time ON. For **cloud version** skills, cloud upload is also install-time ON (choosing cloud version = authorization, install notice informs transparently). For **local-only version**, cloud upload doesn't exist. User can turn off cloud upload anytime with "别传了" (local unaffected).
+6. **Cloud version explicit opt-in**: Local fuel is always install-time ON. For **cloud version** skills, cloud upload is **OFF by default** and only uploads after the user explicitly says "开启云同步" (install notice informs transparently, never uploads by default). For **local-only version**, cloud upload doesn't exist. User can turn off cloud upload anytime with "别传了" (local unaffected).
 
 ### ② Footer 注入：来源 + 进化状态 / ② Footer injection: provenance + evolution status
 
@@ -530,7 +555,7 @@ Every skill forged by SkillForge MUST have evolution fuel (local signal collecti
 
 > ⚙️ 本技能由「技能锻造炉」锻造
 >
-> 想让你的技能也越用越牛？用「技能锻造炉」创建并开启进化（在 SkillHub 搜索技能 slug「cjg-skill-forge」，认准这个唯一标识）。
+> 这个技能会随你的用法越用越懂你：说"我的技能成长"看进展，说"查看我的信号"看它记了什么（只记方法名，零原文）。想自己造一个？在 SkillHub 搜技能 slug「cjg-skill-forge」。
 ```
 
 - **强制**用于 SkillForge 产出的所有技能，无论类型。
@@ -552,7 +577,7 @@ When the skill's iteration loop runs through 藏经阁·易筋 (cloud signal agg
 
 > ⚙️ 本技能由「技能锻造炉」锻造 · 🔄 持续自我迭代中，由藏经阁·易筋支持
 >
-> 想打造/重铸你自己的牛逼技能？用「技能锻造炉」创建并开启进化（在 SkillHub 搜索技能 slug「cjg-skill-forge」，认准这个唯一标识）。
+> 这个技能会随你的用法越用越懂你：说"我的技能成长"看进展，说"查看我的信号"看它记了什么（只记方法名，零原文）。想自己造一个？在 SkillHub 搜技能 slug「cjg-skill-forge」。
 ```
 
 - Tier 2 是**条件式**：仅当技能确实用藏经阁·易筋做云进化时才加（不止本地信号采集）。
@@ -566,16 +591,16 @@ When the skill's iteration loop runs through 藏经阁·易筋 (cloud signal agg
 ### 规则（同时适用于 ① 燃料、② footer 与 ③ coverage.md）/ Rules (apply to ① fuel, ② footer, and ③ coverage.md)
 
 1. **绝不发一个缺三者的锻造技能**——燃料 + footer + coverage.md 是增长飞轮的结缔组织（关① 安装 → 关② 创作 → 关③ 进化环）。**这也适用于 SkillForge 自身**：自 v2.4 起，SkillForge 自带 §零 燃料（云端版）+ Tier 2 footer，接入藏经阁·易筋。一个不锻造自己的锻造炉是 hypocritical 的。
-2. **燃料安装即开**：零摩擦、透明须知、易退出。别把飞轮挡在权限请求后面。
+2. **本地燃料安装即开、云端显式 opt-in**：本地记录零摩擦、透明须知、易退出；云端上传默认关，绝不默认上传，需用户"开启云同步"。透明优先于摩擦。
 3. **footer 面向用户**：用技能的 voice/tone 写（如扫地僧可用老衲口吻，但 footer 本身要清楚、可操作）。
 4. **Tier 2 footer 是挣来的，不是默认的**：只有云进化真的接上时才加 🔄 那行。别承诺没交付的东西。
-5. **二者都是增长工具**：燃料喂进化引擎；footer 把用户引向 SkillForge（CTA）并把藏经阁·易筋标为持续改进的引擎。
+5. **二者服务用户与飞轮**：燃料喂进化引擎；footer 先讲用户价值（越用越懂你、可查看/可关），再附来源标注，不喧宾夺主。
 
 1. **Never ship a forged skill without all three** — fuel + footer + coverage.md are the growth flywheel's connective tissue (关① installation → 关② creation → 关③ evolution loop). **This applies to SkillForge itself**: since v2.4, SkillForge carries its own §零 fuel (cloud version) + Tier 2 footer, connected to 藏经阁·易筋. A forge that doesn't forge itself is hypocrisy.
-2. **Fuel is install-time ON**: zero friction, transparent notice, easy opt-out. Don't gate the flywheel behind a permission request.
+2. **Local fuel install-time ON, cloud explicit opt-in**: local log is zero-friction, transparent, easy opt-out; cloud upload is OFF by default and only on explicit "开启云同步". Transparency over friction.
 3. **Footer is user-facing**: write it in the skill's voice/tone (e.g., sweeping-monk can use 老衲 voice if appropriate, but the footer itself should be clear and actionable).
 4. **Tier 2 footer is earned, not assumed**: only add the 🔄 line when cloud evolution is genuinely wired up. Don't promise what isn't delivered.
-5. **Both are growth instruments**: fuel feeds the evolution engine; footer routes users to SkillForge (CTA) and signals 藏经阁·易筋 as the engine behind continuous improvement.
+5. **Both serve users and the flywheel**: fuel feeds the evolution engine; footer leads with user value (gets smarter with use, viewable/controllable), then attribution — value before CTA.
 
 ### ③ coverage.md 注入（所有锻造技能必带）/ ③ coverage.md injection (mandatory for all forged skills)
 
@@ -606,7 +631,9 @@ Every skill forged by SkillForge MUST carry `references/coverage.md` — the ski
 
 After a forged skill is published, its evolution loop (local `distill_local` / cloud `distill_cron` → proposal → user-review → apply → republish) is driven by SkillForge in the user's conversation. Standard last-mile flow (see 藏经阁·易筋《本地→云端桥接设计规范》§四):
 
-1. **收提案**：本地提案在 `.local_proposals/`，云端提案通过邮件通知创作者 → 对话内说「看看提案」展示（`proposal_render.render_md` 格式）。
+> 🌐 **平台无关性**：本进化闭环是藏经阁·易筋的通用能力，不绑定某一宿主。审核指令「看看提案」在你运行该技能的**任意对话**中生效；当前由 WorkBuddy 内的 SkillForge 驱动，Claude Code / Codex 等跨 agent 适配已在规划中。进化结果落回技能本体（SKILL.md 等），而非某个平台专有格式——技能在哪用、就在哪进化。
+
+1. **收提案**：本地提案在 `.local_proposals/`，云端提案通过邮件汇总通知创作者（多技能创作者一封按技能分组）→ 对话内说「看看提案」调 `scripts/cjg-proposal-cli.py mine` 展示该创作者全部技能的待审提案（跨技能总览，`proposal_render.render_md` 格式）。
 2. **用户审**：通过 / 打回。每条 `change` 含 `file` + `action`(append/rollback) + `rationale` + `draft_text`。
 3. **应用 delta**：
    - 应用前自动备份原文件到 `.backup/YYYY-MM-DDTHH-MMSS_<filename>`。
@@ -617,7 +644,7 @@ After a forged skill is published, its evolution loop (local `distill_local` / c
 6. **提醒发布**：应用完成后主动提示「已升级到 vX.Y.Z。如需发布到外部平台，请说『发布』」。
 7. **重发布（用户主动）**：用户说「发布」→ 调本技能自带的发布器 `scripts/forge-publish.py`（纯标准库、零依赖，随技能包分发）：
 
-1. **Collect proposals**: local proposals live in `.local_proposals/`; cloud proposals notify the creator by email → say "看看提案" (show proposals) in chat (`proposal_render.render_md` format).
+1. **Collect proposals**: local proposals live in `.local_proposals/`; cloud proposals notify the creator by email (multi-skill creators get one grouped email) → say "看看提案" (show proposals) in chat to call `scripts/cjg-proposal-cli.py mine` (cross-skill overview, `proposal_render.render_md` format).
 2. **User reviews**: approve / reject. Each `change` has `file` + `action`(append/rollback) + `rationale` + `draft_text`.
 3. **Apply delta**:
    - Auto-backup the original file to `.backup/YYYY-MM-DDTHH-MMSS_<filename>` before applying.
@@ -646,8 +673,8 @@ python <技能锻造炉安装目录>/scripts/forge-publish.py --platform both --
    - **GitHub / Gitee / 跨 agent（Codex、Claude Code）适配**：规划中，发布器已预留接口，后续版本开放。
    - 发布前校验：`forge-publish.py --check` 确认 frontmatter 合规 + 双模态文案 + Tier 2 footer + `cloud_config.json`（仅 URL、无 token，云端模式）。
    - 版本日志铁律：changelog 只写用户侧体验变化，不泄露开发侧细节（架构/API/内部 Bug）。
-   - ⚠️ **安全铁律（查看提案必须创作者鉴权）**：`list`/`get` 现已**强制携带创作者 token**（CLI 已从「凭 slug 免密」改为强制）。后端 `GET /?slug=` **必须**校验该 token 对应创作者是否拥有该 slug——否则任何人凭 slug 可读提案（含内部蒸馏信号/变更草稿，属隐私与内部信息泄露）。**后端未上线此校验前，本保护不完整。**
-   - **查看与应用平台提案（藏经阁·易筋闭环收口）**：创作者说「看看提案」→ 调 `scripts/cjg-proposal-cli.py list` 展示平台蒸馏出的待审改进（版本差/变更文件/理由/草稿）；「应用提案 <id>」→ 先 `approve --id <id>` 云端标记批准，再按提案 `changes` 逐条本地应用（`append` 追加 `draft_text` / `rollback` 从备份恢复，应用前自动备份到 `.backup/`，可撤销），版本 `patch+1`，更新 frontmatter，提醒发布；「打回提案 <id>」→ `reject --id <id>` 附意见回传蒸馏闭环。前置：包内 `cloud_config.json`（仅公网 URL，无 token）；应用/打回提案的创作者 token 由本地开发环境 `.deploy/cloud_open.json` 提供。
+   - ⚠️ **安全铁律（查看提案必须创作者鉴权）**：`list`/`mine`/`get` 现已**强制携带创作者 token**（CLI 已从「凭 slug 免密」改为强制）。后端 `GET /?slug=` 与 `?mine=1` **必须**校验该 token 对应创作者归属——`mine` 严格按 `user_id` 返回本人提案，绝不泄漏他人；`slug` 路由须校验 token 对应创作者是否拥有该 slug——否则任何人凭 slug 可读提案（含内部蒸馏信号/变更草稿，属隐私与内部信息泄露）。**后端未上线此校验前，本保护不完整。**
+   - **查看与应用平台提案（藏经阁·易筋闭环收口）**：创作者说「看看提案」→ 调 `scripts/cjg-proposal-cli.py mine` 展示该创作者**全部技能**的待审改进（跨技能总览，版本差/变更文件/理由/草稿）；「应用提案 <id>」→ 先 `approve --id <id>` 云端标记批准，再按提案 `changes` 逐条本地应用（`append` 追加 `draft_text` / `rollback` 从备份恢复，应用前自动备份到 `.backup/`，可撤销），版本 `patch+1`，更新 frontmatter，提醒发布；「打回提案 <id>」→ `reject --id <id>` 附意见回传蒸馏闭环。前置：包内 `cloud_config.json`（仅公网 URL，无 token）；应用/打回提案的创作者 token 由本地开发环境 `.deploy/cloud_open.json` 提供。
 
    - **One-time prep before first publish** (the script auto-detects and guides, no need to memorize commands):
      - **SkillHub**: install SkillHub CLI, log in, credentials go to `~/.skillhub/credentials.json`.
@@ -658,8 +685,8 @@ python <技能锻造炉安装目录>/scripts/forge-publish.py --platform both --
    - **GitHub / Gitee / cross-agent (Codex, Claude Code) adapters**: planned; the publisher already reserves interfaces, opened in a later version.
    - Pre-publish check: `forge-publish.py --check` confirms frontmatter compliance + dual-modal copy + Tier 2 footer + `cloud_config.json` (URLs only, no token, cloud mode).
    - Changelog iron rule: changelog writes ONLY user-side experience changes, never leaks dev-side details (architecture/API/internal bugs).
-   - ⚠️ **Security iron rule (viewing proposals requires creator auth)**: `list`/`get` now MANDATE the creator token (CLI changed from slug-only public read). The backend `GET /?slug=` MUST verify the token's owner owns that slug — otherwise anyone with the slug can read proposals. Protection is incomplete until the backend enforces this.
-   - **View & apply platform proposals (closing the CJG-Evo loop)**: creator says "看看提案" (show proposals) → call `scripts/cjg-proposal-cli.py list` to show the platform-distilled pending improvements (version diff / changed files / rationale / draft); "应用提案 <id>" (apply proposal) → first `approve --id <id>` to mark approved in the cloud, then apply each `change` locally per the proposal (`append` adds `draft_text` / `rollback` restores from backup, auto-backup to `.backup/` before applying, undoable), `patch+1` version, update frontmatter, remind to publish; "打回提案 <id>" (reject proposal) → `reject --id <id>` with a note to feed back into the distill loop. Prerequisite: `cloud_config.json` in the package (public URLs only, no token); the creator's token for approve/reject comes from the local dev environment `.deploy/cloud_open.json`.
+   - ⚠️ **Security iron rule (viewing proposals requires creator auth)**: `list`/`mine`/`get` now MANDATE the creator token (CLI changed from slug-only public read). The backend `GET /?slug=` and `?mine=1` MUST verify the token's owner: `mine` returns only that user's own proposals by `user_id` (never leaks others); the `slug` route MUST verify ownership. Protection is incomplete until the backend enforces this.
+   - **View & apply platform proposals (closing the CJG-Evo loop)**: creator says "看看提案" (show proposals) → call `scripts/cjg-proposal-cli.py mine` to show the platform-distilled pending improvements across **all the creator's skills** (cross-skill overview, version diff / changed files / rationale / draft); "应用提案 <id>" (apply proposal) → first `approve --id <id>` to mark approved in the cloud, then apply each `change` locally per the proposal (`append` adds `draft_text` / `rollback` restores from backup, auto-backup to `.backup/` before applying, undoable), `patch+1` version, update frontmatter, remind to publish; "打回提案 <id>" (reject proposal) → `reject --id <id>` with a note to feed back into the distill loop. Prerequisite: `cloud_config.json` in the package (public URLs only, no token); the creator's token for approve/reject comes from the local dev environment `.deploy/cloud_open.json`.
 
 > 本段是 Discipline 11 的收口：① fuel + ② footer + ③ coverage.md 让飞轮转起来，④ last-mile 让转出来的进化真正落版并回到用户手里。SkillForge 自身也走同一套（§零 云端版 + Tier 2 footer + 本段 last-mile）。
 

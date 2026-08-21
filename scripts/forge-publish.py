@@ -57,7 +57,9 @@ SKILLHUB_API_HOST = "https://api.skillhub.cn"
 SKILLHUB_CREDENTIALS = Path.home() / ".skillhub" / "credentials.json"
 SKILLHUB_PYTHON = "python"
 SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
-                          ".cloud_optin", ".optin"]
+                          ".cloud_optin", ".optin", ".anon_id",
+                          ".errored_ids.txt", ".upload_zero_rounds",
+                          ".uploaded_ids.txt", "signals-log.jsonl"]
 EMAIL_FIELD_HINTS = ("email", "mail", "_email", "contact_email")
 _GENERATED = "__GENERATED__"
 
@@ -294,9 +296,9 @@ def publish_skillhub(skill_dir: Path, slug: str, version: str,
         return False
     ensure_frontmatter(skill_dir, slug, "")
     backups: dict = {}
-    backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
-    backups.update(generic_sanitize_config(skill_dir))
     try:
+        backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
+        backups.update(generic_sanitize_config(skill_dir))
         cmd = [
             SKILLHUB_PYTHON, str(_find_skillhub_cli()), "publish", str(skill_dir),
             "--version", version, "--changelog", changelog,
@@ -343,10 +345,25 @@ def publish_clawhub(skill_dir: Path, slug: str, version: str,
     print(f"  [ClawHub] Publishing {slug} v{version} ...")
     ensure_frontmatter(skill_dir, slug, "")
     backups = generic_sanitize_config(skill_dir)
+    backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
+    # ClawHub CLI v0.23.0+ 兼容：若技能目录含 .claude-plugin/plugin.json，会被误识别为
+    # plugin 而强制走 `package publish`（需 openclaw.plugin.json），导致发布失败。
+    # 这里临时挪开该文件，走 skill 发布路径（读 SKILL.md），发布后还原。
+    plugin_json = skill_dir / ".claude-plugin" / "plugin.json"
+    plugin_bak = skill_dir / ".claude-plugin" / "plugin.json.clawhub-bak"
+    plugin_moved = False
+    if plugin_json.exists():
+        try:
+            plugin_json.rename(plugin_bak)
+            plugin_moved = True
+        except Exception:
+            pass
     try:
+        # 新语法：clawhub publish <path> [--slug --name --version --changelog ...]
         cmd = [
-            str(_find_clawhub_cli()), "skill", "publish", str(skill_dir),
-            "--slug", slug, "--version", version, "--changelog", changelog,
+            str(_find_clawhub_cli()), "publish", str(skill_dir),
+            "--slug", slug, "--name", slug,
+            "--version", version, "--changelog", changelog,
         ]
         if dry_run:
             print(f"    (dry-run) 将执行: {' '.join(cmd)}")
@@ -367,6 +384,11 @@ def publish_clawhub(skill_dir: Path, slug: str, version: str,
             print(f"    ✗ {stderr}")
             return False
     finally:
+        if plugin_moved and plugin_bak.exists():
+            try:
+                plugin_bak.rename(plugin_json)
+            except Exception:
+                pass
         restore_files(skill_dir, backups)
 
 
