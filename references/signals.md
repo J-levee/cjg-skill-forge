@@ -42,6 +42,12 @@
 | `weight` | 信号强度 | 1–5 整数 |
 | `note` | 触发类 / 主题标签 | 仅方法层类目标签 |
 | `anon_id` | 本机一次性随机匿名 ID | UUIDv4，存于 `.anon_id` |
+| `accepted` | **采纳标记（P0 闭环）** | `1/0/true/false`，仅 `accept`(=1)/`reject`(=0) 事件填；其余事件 NULL。**前瞻判断，不代表已验证有效**（验证在 P1 回环闭合） |
+| `revision_rounds` | **修订轮次（P0 闭环）** | 整数 1–50；accept 时填「该建议最终定稿轮次」（首轮采纳=1），iteration 时填「当前轮次」 |
+| `feedback_tag` | **错题分类（P0 闭环）** | 受控枚举：`boundary`/`format`/`desensitivity`/`accuracy`/`other` |
+| `recurrence` | **同反馈复发标记** | `1/0/true/false`，同一反馈反复出现时计 |
+| `attribution` | **归因（P0 闭环）** | `agent`/`skill`/`harness`/`unknown`（harness=运行时/工具可用性；unknown 交 P1 人审） |
+| `attribution_note` | **归因备注** | ≤255 位字符串，服务端强制 `pii_scrub` 脱敏 |
 
 ### L1–L7 层码（锻造炉语义）
 
@@ -55,7 +61,9 @@
 | `L6` | 内嵌清晰化（Embedded clarity） | S7 四维（D1–D4）+ 保真红线 |
 | `L7` | 发布闸门（Publish gates） | S8 可推广 + 纪律13/17 安全审计 + last-mile 闭环 |
 
-### event 枚举（6 类，由 Tier 0 对话信号推断）
+### event 枚举（10 类：6 推断类 + 4 闭环类）
+
+**6 类基础事件（由 Tier 0 对话信号推断）：**
 
 | event | 触发信号 |
 |-------|----------|
@@ -65,6 +73,49 @@
 | `suggestion` | 用户提出了对锻造炉自身的改进建议 |
 | `abandoned` | 用户中途放弃本次锻造 / 审视 |
 | `misdiagnosis` | 锻造炉给了错误的方法论建议（被指出或事后发现） |
+
+**4 类闭环事件（P0 新增，触发源见 §二·五）：**
+
+| event | 触发信号 | 填哪些 P0 字段 |
+|-------|----------|----------------|
+| `accept` | 用户**显式「采纳 / 应用」**了 AI 提议的修改（「继续」「执行」等仅表推进已共识方案，**不计**） | `accepted=1` + `revision_rounds` + `attribution`（可 NULL 交 P1 人审） |
+| `reject` | 用户**明确驳回** AI 提议的修改，或会话结束未采纳 | `accepted=0` + `feedback_tag`（按驳回原因分类，可 NULL） |
+| `iteration` | AI 据用户反馈对**同一修改建议**重新生成 / 修订（进入第 N 轮） | `revision_rounds=N` + `recurrence`（复发计） |
+| `edit_capture` | 用户在**任何上下文**手改技能文件（由 `capture_skill_edits.py` 哈希 diff 自动记录，非 AI 主动发） | 无（`note` 记 `<add|modify|delete>:<相对路径>`，`attribution` 恒 NULL） |
+
+### 二·五 迭代闭环信号（P0 · accept/reject/iteration 谁在何时发）
+
+> 权威行为规格（GAP-1 闭合）：见 `skill2loop-p0-review-2026-08-21.md` §2.5。本节为信号侧落文档。
+
+**触发语境（只有"AI 主动提议修改某技能"时才发）：**
+
+| 事件 | 写点（SkillForge 逻辑内） | 防误发边界 |
+|------|---------------------------|------------|
+| `accept` | 用户对 AI 提议的修改做**显式「采纳 / 应用」确认后**（AI 随后执行 apply 是其机械后果，不作为判定条件） | 「继续」「执行」「按既定方案推进」等仅表推进已共识方案，**不计为 accept**；纯使用技能、无修改提议 → 不发 |
+| `reject` | 用户**明确驳回 / 拒绝** AI 提议后，或会话结束未采纳 | 驳回才发；单纯未提建议不发 |
+| `iteration` | AI 收到用户反馈后，对**同一修改建议**重新生成 / 修订（进入第 N 轮） | 不同建议各自独立计轮；`revision_rounds` 填当前轮次 |
+
+**写入通道**：与 `upload_signals.py` 同源的本地 log 写入，向 `<skill_dir>/signals-log.jsonl` append 一行（不新建通道、不新建表）。采集关（`.optin=off`）则上述事件不写。产生 accept/reject/iteration 时沿用 A5 可见标记在对话中告知「本次已记录你的采纳/驳回/修订」。
+
+**JSON 形状（权威示例，与 §二 字段表一致）：**
+
+```json
+{"ts":"...","signal_id":"<uuid>","skill_slug":"cjg-skill-forge","skill_version":"<ver>","method_layer":"L2",
+ "event":"accept","weight":4,"accepted":1,"revision_rounds":1,"feedback_tag":null,
+ "recurrence":0,"attribution":"skill","attribution_note":null,"anon_id":"<本机uuid>"}
+```
+
+**语义边界**：`accepted` 记录的是用户「前瞻判断」，不代表改动已被验证有效（验证在 P1 回环闭合：对比采纳前后采纳率）；看板不可把 `accepted=1` 解读为"已证明好用"。`revision_rounds` 语义：accept 时填「该建议最终定稿的轮次」（首轮采纳=1），iteration 时填「当前轮次」。
+
+### 二·六 被动改动捕获（P0 · edit_capture）
+
+> 由 `scripts/capture_skill_edits.py` 自动完成（每日 23:30 上传触发时在 `upload_signals.py` 之后调用）。
+
+- **机制**：维护 `<skill_dir>/.skill_edit_baseline.json`（`{ "<相对路径>": "<sha256 前16位>" }`，范围仅 `SKILL.md` / `references/*` / `scripts/*`）；首跑仅建基线不产信号；后续 diff 出增/改/删 → append 一行 `edit_capture` 信号（`note` = `<add|modify|delete>:<相对路径>`）。
+- **默认本地、零云默认**：`edit_capture` 只写本地 `signals-log.jsonl`；是否上行云由既有 `.cloud_optin` 控制（延续双模态），与闭环事件同一通道。
+- **只读红线（不可逾越）**：捕获脚本**绝不写入/修改/删除任何技能内容文件**，只读哈希 + 写运行时产物（`.skill_edit_baseline.json` / `signals-log.jsonl`）。P0 阶段只度量、不改动；自动改进写回（loop apply）将在后续版本提供。
+- **隐私**：只记相对路径 + kind，不读文件内容、不记绝对路径/用户名（零 PII）。`.skill_edit_baseline.json` 同 `.optin` 等为运行时产物，不进包/不进 git。
+- **用户控制**：说「别记了」关本地采集（`.optin=off`）→ 捕获随之停止；`signals.md` 首次启用时透明告知用户。
 
 ## 三、两层授权模型（本地安装即开 / 云端上传默认关需显式开启）
 
@@ -156,11 +207,11 @@ printf '%s\n' "$(python -c "import json,uuid,datetime; print(json.dumps({'ts':da
 
 ### 云端 API 规范
 
-- **端点**：`cloud_config.json` 的 `ingest_url` + `/ingest/anon`（随包分发，仅公网 URL、零密钥），兜底内置 `https://1318491188-fpwsv5k3eh.ap-guangzhou.tencentscf.com`。
+- **端点**：`cloud_config.json` 的 `ingest_url` + `/ingest/anon`（随包分发，仅公网 URL、零密钥；**代码零硬编码**，端点完全来自外部配置，缺失则跳过云端上传）。
 - **鉴权**：**无**（匿名端点免鉴权）。首次上报可不带 `anon_id`，由服务端 HMAC 签发并返回；后续携带复用同一限流身份。
-- **Body 白名单**：`{slug, method_layer, event, weight, note, anon_id, mode, skill_version, client_signal_id}`。
+- **Body 白名单**：`{slug, method_layer, event, weight, note, anon_id, mode, skill_version, client_signal_id, accepted, revision_rounds, feedback_tag, recurrence, attribution, attribution_note}`（P0 闭环 6 字段全部可选，缺失落 NULL）。
 - **method_layer**：须为 **L1–L7 层码**。
-- **event 枚举**：`confusion` / `helpful` / `unhelpful` / `suggestion` / `misdiagnosis` / `abandoned`。
+- **event 枚举**：`confusion` / `helpful` / `unhelpful` / `suggestion` / `misdiagnosis` / `abandoned` / `accept` / `reject` / `iteration` / `edit_capture`。
 - **weight 范围**：1–5 整数。
 - **限流**：per-anon_id 100 次/小时 + 全局护栏 10000 次/小时；超限返回 429（脚本收到 429 立即停本轮，下轮续）。
 - **零 PII 校验**：云端 `signal_validate` 强制白名单 + note 脱敏扫描，超出字段直接拒绝。

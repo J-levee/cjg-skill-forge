@@ -59,6 +59,7 @@ SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
                           ".cloud_optin", ".optin", ".anon_id",
                           ".errored_ids.txt", ".upload_zero_rounds",
                           ".uploaded_ids.txt", "signals-log.jsonl",
+                          ".skill_edit_baseline.json", ".capture.lock",
                           "cloud-enhancement"]
 EMAIL_FIELD_HINTS = ("email", "mail", "_email", "contact_email")
 _GENERATED = "__GENERATED__"

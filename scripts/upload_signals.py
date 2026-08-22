@@ -41,7 +41,20 @@ MAX_RETRY = 3
 BACKOFF_BASE = 2.0
 
 # 标准白名单字段（本地 → 云端）
-EVENTS = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis"}
+EVENTS = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis",
+          "accept", "reject", "iteration", "edit_capture"}
+
+# P0 闭环质量新增字段（透传；剥字段降级时排除这些）
+NEW_FIELDS = {"accepted", "revision_rounds", "feedback_tag", "recurrence",
+              "attribution", "attribution_note"}
+
+
+def _is_unknown_column(err_text):
+    """GAP-2 判定：服务端是否因「未知列」拒绝（迁移尚未跑的竞态窗口）。"""
+    if not err_text:
+        return False
+    t = err_text.lower()
+    return "unknown column" in t or ("column" in t and "unknown" in t)
 
 
 def resolve_ingest_url(skill_dir):
@@ -180,14 +193,20 @@ def build_payload(obj, anon_id_fallback):
         "skill_version": skill_version,
         "mode": "cloud",
     }
+    # P0 闭环质量：透传新增字段（非 None 才塞，保持向后兼容）
+    for nf in NEW_FIELDS:
+        val = obj.get(nf)
+        if val is not None:
+            payload[nf] = val
     # client_signal_id（幂等键）由调用方用稳定的 cid 填充
     return payload
 
 
 def post_signal(url, payload, timeout=10):
-    """返回 (status, ok_bool, category, anon_id)。
+    """返回 (status, ok_bool, category, anon_id, err_text)。
 
     anon_id：服务端签发的稳定匿名 ID（仅 2xx 且有 body 时非空）。
+    err_text：错误响应体文本（GAP-2 降级判定用；成功时为空串）。
     客户端据此回写 .anon_id 文件，使同机后续上传复用 → 人数去重准确。
     """
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -206,24 +225,32 @@ def post_signal(url, payload, timeout=10):
                     anon_id = (json.loads(resp.read().decode("utf-8")) or {}).get("anon_id", "")
                 except Exception:
                     anon_id = ""
-                return status, True, "ok", anon_id
+                return status, True, "ok", anon_id, ""
             if status == 429:
-                return status, False, "stop", ""
+                return status, False, "stop", "", ""
             if 400 <= status < 500:
-                return status, False, "perm", ""
-            return status, False, "retry", ""  # 5xx 等
+                try:
+                    body = resp.read().decode("utf-8", errors="replace")
+                except Exception:
+                    body = ""
+                return status, False, "perm", "", body
+            return status, False, "retry", "", ""  # 5xx 等
     except urllib.error.HTTPError as e:
         status = e.code
         if status == 429:
-            return status, False, "stop", ""
+            return status, False, "stop", "", ""
         if 400 <= status < 500:
-            return status, False, "perm", ""
-        return status, False, "retry", ""
+            try:
+                body = e.read().decode("utf-8", errors="replace") if e.fp else ""
+            except Exception:
+                body = ""
+            return status, False, "perm", "", body
+        return status, False, "retry", "", ""
     except (urllib.error.URLError, TimeoutError, OSError, ConnectionError):
         # 网络不可达 / 超时 / DNS 失败 → 离线排队，不计入死信
-        return -1, False, "net", ""
+        return -1, False, "net", "", ""
     except Exception:
-        return -2, False, "net", ""
+        return -2, False, "net", "", ""
 
 
 def process_skill(skill_dir, dry_run=False):
@@ -311,14 +338,23 @@ def process_skill(skill_dir, dry_run=False):
             uploaded_now += 1
             continue
 
-        # 上传 + 重试
+        # 上传 + 重试（含 GAP-2 优雅降级：unknown column → 剥新字段重试一次）
         ok = False
         category = "net"
         returned_anon = ""
+        err_text = ""
+        gap2_stripped = False  # 是否已执行过剥字段降级
         for attempt in range(MAX_RETRY + 1):
-            status, ok, category, returned_anon = post_signal(url, payload)
+            status, ok, category, returned_anon, err_text = post_signal(url, payload)
             if ok:
                 break
+            # GAP-2：首次遇到 unknown column → 剥 6 新字段重试一次（迁移竞态窗口）
+            if not gap2_stripped and _is_unknown_column(err_text):
+                log(f"[{name}] GAP-2 降级：服务端未知列(迁移未跑?)，剥 {len(NEW_FIELDS)} 个新字段重试 signal_id={cid}")
+                for nf in NEW_FIELDS:
+                    payload.pop(nf, None)
+                gap2_stripped = True
+                continue  # 用精简 payload 重试（不计入 attempt）
             if category == "stop":
                 # 429：立即停本轮
                 log(f"[{name}] 收到 429 限流，停止本轮批量（下轮续传）")
