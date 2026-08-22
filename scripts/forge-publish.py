@@ -60,6 +60,7 @@ SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
                           ".errored_ids.txt", ".upload_zero_rounds",
                           ".uploaded_ids.txt", "signals-log.jsonl",
                           ".skill_edit_baseline.json", ".capture.lock",
+                          ".apply-snapshots",
                           "cloud-enhancement"]
 EMAIL_FIELD_HINTS = ("email", "mail", "_email", "contact_email")
 _GENERATED = "__GENERATED__"
@@ -622,9 +623,11 @@ def main():
     parser.add_argument("--platform", default="both",
                         choices=["skillhub", "clawhub", "both", "github", "gitee"],
                         help="目标平台 (default: both)")
-    parser.add_argument("--changelog", default=None, help="发布 changelog（用户侧体验变化）")
+    parser.add_argument("--changelog", default=None, help="发布 changelog（站用户侧：改了什么 + 价值，禁生产侧文案）")
     parser.add_argument("--version", default=None, help="覆盖版本号（默认读 frontmatter）")
     parser.add_argument("--dry-run", action="store_true", help="试运行，不真正上线")
+    parser.add_argument("--force", action="store_true",
+                        help="changelog 含生产侧文案时仍发布（默认拒绝，防内部文案外泄）")
     parser.add_argument("--check", action="store_true",
                         help="仅本地校验（不调用网络/CLI）")
     parser.add_argument("--slug", default=None, help="覆盖 slug（默认读 frontmatter）")
@@ -657,6 +660,28 @@ def main():
 
     if args.check:
         sys.exit(check_only(skill_dir, slug))
+
+    # 发布版本说明用户侧校验（披露范围铁律 · references/skill-writing-guide.md 第 6 节）：
+    # 复用同目录 writing_gate.py 的禁词表（单一真相源）；显式传 changelog 才阻断校验。
+    if args.changelog:
+        try:
+            import writing_gate
+        except ImportError:
+            writing_gate = None
+        if writing_gate is None:
+            print("  ⚠ 未找到 writing_gate.py，跳过 changelog 禁词校验")
+        else:
+            hits, warns = writing_gate.check_changelog(changelog)
+            for w in warns:
+                print(f"  ⚠ {w}")
+            if hits and not args.force:
+                print("✗ changelog 含生产侧禁词，发布被拦（该文案会展示给终端用户，必须站用户侧）：")
+                for h in hits[:6]:
+                    print(f"    - {h}")
+                print("  请改写为「改了什么 + 有什么价值」，简要 2–5 条；")
+                print("  参考本技能 references/skill-writing-guide.md 第 6 节模板与正反对照。")
+                print("  如确需发布，加 --force 明确接受。")
+                sys.exit(1)
 
     # 方案C：cloud_config.json 由技能目录自带（仅 URL，无 token）；发布工具不注入任何凭据。
 
