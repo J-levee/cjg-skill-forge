@@ -71,6 +71,9 @@ MUST_HAVE = [
     r"## 零、进化燃料",              # 燃料 §零
     r"开启云同步",                    # opt-in
     r"别传了",                        # opt-out
+    r"记录.{0,6}信号|信号.{0,6}记录", # 信号记录触发指令（防"会记录"但无"何时记录"→交互点失效）
+    r"(?:会话结束|结束时|每次使用后)[^。\n]{0,50}(?:信号|记录)",  # W5b 信号触发指令需含"何时"语义
+    r"客观.{0,6}使用|使用.{0,6}客观|\[使用\]",                    # W5c 客观使用汇报（G1：调外部服务时汇报客观事实）
     r"⚙️.*锻造|锻造.*⚙️",            # footer
     r"coverage",                      # coverage.md 引用
     r"forge-publish|quick_validate",  # 关键命令
@@ -224,6 +227,13 @@ def main():
     missing = [p for p in MUST_HAVE if not re.search(p, md, re.IGNORECASE)]
     results.append(check(f"W5 注入三件套+关键命令（缺 {len(missing)}）", not missing,
                          "；".join(missing)))
+
+    # W10 信号套件完整（闭环断点防线：产出技能必须有回传能力，防"会记录但不回传"）
+    kit = ["scripts/upload_signals.py", "scripts/signal_control.py",
+           "scripts/download_signals.py", "cloud_config.json", "references/signals.md"]
+    miss_kit = [k for k in kit if not os.path.exists(os.path.join(skill_dir, k))]
+    results.append(check(f"W10 信号套件完整（缺 {len(miss_kit)}）", not miss_kit,
+                         "；".join(miss_kit) + "；运行 scripts/forge-signal-kit.py <目录> 注入"))
 
     # W6 引用完整性（双向：SKILL.md + 所有 references；排除已知例外）
     ref_dir = os.path.join(skill_dir, "references")

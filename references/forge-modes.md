@@ -33,7 +33,7 @@ Each version = ONE concrete user instruction + ONE externally-anchored improveme
 
 | 阶段 | 名称 | 必交付物 | 跳过后果 |
 |------|------|----------|----------|
-| S0 | 脚手架 | SKILL.md + 纪律11三件套（进化燃料+footer+coverage.md） | 不可加载 |
+| S0 | 脚手架 | SKILL.md + 纪律11三件套（进化燃料+footer+coverage.md）+ **信号套件**（运行 `scripts/forge-signal-kit.py <B目录>` 注入 upload_signals/signal_control/download_signals + cloud_config.json + signals.md） | 不可加载 / **信号无法回传（闭环断）** |
 | **S1** | **真实接线** | 写清真实调用语法 + 装好依赖技能 | 完成度 0 分 |
 | **S2** | **真机取证** | 用真实账号/真实数据跑通 1 条主链路，真实返回写入 `references/*_evidence.md` | 实用性 空话 |
 | **S3** | **外部标杆（全球）** | 扒 ≥3 个**全球真实竞品**（全网，不得仅限局部场景）做对标表 | 不知排第几 |
@@ -54,8 +54,16 @@ Each version = ONE concrete user instruction + ONE externally-anchored improveme
 6. **S8 可推广闸门**：S7 后、发布前跑纪律 16；S8 复用 S7 清晰化产物为 Convention 证据，不重复清晰化。
 7. **S9 全量自测闸门（纪律 18）**：S8 后、发布前跑 `scripts/selfcheck.py` 本地全量（结构/套件/入口/文件/链路）；开发侧另跑云端链路 `run_skill_forge_cloud.py`。任一 ❌ → 退回修复，不发布。
 
-#### ☁️ 云进化前置：注册 slug（创建期提醒）
-若想要**跨用户同 slug 的真实反馈闭环**（信号→蒸馏→提案→重发布），**必须注册本技能 slug**——未注册则云信号无法归因。两条命令：`python scripts/forge-register.py register` → `python scripts/forge-register.py verify <验证码>`；创作者 token 存 `<技能目录>/.deploy/cloud_open.json`，**不进发布包**。
+#### ☁️ 云进化前置：注册 slug（创建期强制引导 · 对应 SKILL.md A.0）
+
+**S1 定名后必须主动向创作者说明云进化闭环**（SKILL.md A.0 为权威文案，此处为执行步骤）：
+1. **告知价值**：发布后终端用户匿名反馈 → 藏经阁聚合 → 改进提案 → 创作者审核发布 → 新版本，技能越用越牛。
+2. **三件套引导**（不强迫，跳过即尊重）：
+   - 注册：`python scripts/forge-register.py register` → 邮箱收验证码 → `verify <验证码>`（token 存 `<技能目录>/.deploy/cloud_open.json`，**不进发布包**）；
+   - 开启云同步：让创作者说「开启云同步」（本机信号开始匿名回传）；
+   - 每日自动回传（可选）：装 `cloud-enhancement/` 后建每日任务；不装则本地记录 + 手动 `upload_signals.py`。
+3. **检查注册态**：`python scripts/forge-register.py status` 可查当前 slug 是否已验证——升级已有技能时先查再提醒。
+4. **发布前提示**：S8 发布时若 slug 未注册/未开云同步，提醒"该技能将无跨用户闭环"（不阻断发布，仅透明告知）。
 
 #### 真实范例
 `novelty-validator` v1.1.0 按本子模式锻造（S1 接线 / S2 真机 / S3 全球标杆 / S4 覆盖 C1–C12 全 ✅）。完整流程模板见 `references/contest-hard-forge.md`。

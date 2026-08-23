@@ -74,7 +74,7 @@ agent_created: true
 
 ## 零、进化燃料
 
-本技能会记录方法层信号（本地记录，默认开启；字段与事件规范见 `references/signals.md`）；云端上传默认关闭，说"开启云同步"才开启；说"别传了"关闭；说"删除我的信号"清空。
+本技能会记录方法层信号（本地记录，默认开启；**每次会话结束输出收尾信号块并记录一条方法层标签**，若本次调用了外部服务则追加一条**客观使用汇报**（`[使用] 服务×N 成功M 失败K`，字段见 `references/signals.md` §二·七）；会话开始自动补传与拉回；字段与事件规范见 `references/signals.md`）；云端上传默认关闭，说"开启云同步"才开启；说"别传了"关闭；说"删除我的信号"清空。
 
 ## 何时使用 / When to use（触发词）
 
@@ -108,19 +108,19 @@ def stage_b_produced():
         skill = os.path.join(tmp, "joint-sample")
         os.makedirs(os.path.join(skill, "references"))
         _write(os.path.join(skill, "SKILL.md"), MINI_SKILL)
-        # 注入三件套（writing_gate W5 需要）+ 引用文件（W7 需加载声明）
+        # 覆盖说明书（W7 需加载声明）；signals.md/cloud_config/脚本由信号套件注入
         _write(os.path.join(skill, "references", "coverage.md"),
                "# 覆盖维度\n> 触发到覆盖审计时加载。\n\n- **能力**: 样例\n- **类型**: 测试\n")
-        _write(os.path.join(skill, "references", "signals.md"),
-               "# 进化燃料\n> 触发到信号记录时加载。\n\n## 字段\n- coverage_gap: 覆盖缺口说明\n")
-        # 复制发布配置（方案C 零密钥）
-        src_cc = os.path.join(SKILL_DIR, "cloud_config.json")
-        if os.path.exists(src_cc):
-            _write(os.path.join(skill, "cloud_config.json"), open(src_cc, encoding="utf-8").read())
 
-        # B1 [创作者] 写作规范门：产出技能必须通过 W1–W8+W3a/W3b
+        # B0 [创作者] 信号套件注入（闭环断点防线：产出技能必须有回传能力）
+        r = run([PY, os.path.join(HERE, "forge-signal-kit.py"), "inject", skill])
+        check("[创作者] 信号套件注入（upload/control/download + cloud_config + signals.md）",
+              r.returncode == 0, r.stdout[-200:])
+
+        # B1 [创作者] 写作规范门：产出技能必须通过 W1–W8+W3a/W3b+W10
         r = run([PY, os.path.join(HERE, "writing_gate.py"), skill])
-        check("[创作者] 产出技能过写作规范门（W1–W8+W3a/W3b）", r.returncode == 0, r.stdout[-300:])
+        check("[创作者] 产出技能过写作规范门（W1–W8+W3a/W3b+W10 信号套件）",
+              r.returncode == 0, r.stdout[-300:])
 
         # B2 [平台] 发布前校验（forge-publish --check，含 SEO 描述长度）
         r = run([PY, os.path.join(HERE, "forge-publish.py"), "--path", skill, "--check"])
@@ -138,18 +138,18 @@ def stage_b_produced():
         leaked = tops & exclude
         check("[平台] 产出技能发布包无运行时产物泄露", not leaked, f"泄露 {leaked}")
 
-        # B4 [用户] 信号链路：bootstrap 语义 + dry-run 统计 + 透明控制
+        # B4 [用户] 信号链路：用 B 自己的套件（闭环核心——B 能独立回传）
         sig = {"ts": "2026-08-22T10:00:00", "signal_id": "js-001", "client_signal_id": "js-001",
                "skill_slug": "joint-sample", "skill_version": "9.9.9", "method_layer": "L3",
                "event": "helpful", "weight": 1, "note": "joint", "anon_id": "joint-anon"}
         _write(os.path.join(skill, "signals-log.jsonl"),
                json.dumps(sig, ensure_ascii=False) + "\n")
         _write(os.path.join(skill, ".cloud_optin"), "on")
-        r = run([PY, os.path.join(HERE, "upload_signals.py"), "--base", tmp, "--dry-run"])
-        check("[用户] 产出技能 upload dry-run 统计待传（on）",
+        r = run([PY, os.path.join(skill, "scripts", "upload_signals.py"), "--base", tmp, "--dry-run"])
+        check("[用户] B 自己的 upload 脚本 dry-run 统计待传（on）",
               r.returncode == 0 and "本应上传 1 条" in r.stdout, r.stdout[-180:])
-        r = run([PY, os.path.join(HERE, "signal_control.py"), "status", "--dir", skill])
-        check("[用户] 产出技能 signal_control status", r.returncode == 0 and "Traceback" not in r.stderr)
+        r = run([PY, os.path.join(skill, "scripts", "signal_control.py"), "status", "--dir", skill])
+        check("[用户] B 自己的 signal_control status", r.returncode == 0 and "Traceback" not in r.stderr)
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)
@@ -173,7 +173,10 @@ def stage_c_cloud():
                 check(f"[用户] 端点配置 {name}", bool(cc[key].startswith("https://")), cc[key])
     if WITH_CLOUD:
         import time as _time
-        alt = "C:/Users/zyd/WorkBuddy/2026-07-10-22-37-49/cjg-evo/backend/local_test/run_skill_forge_cloud.py"
+        # 云端链路脚本路径：环境变量优先，其次按常见开发目录相对推导（不硬编码用户名/机器路径）
+        alt = (os.environ.get("CJG_CLOUD_TEST_SCRIPT") or
+               os.path.join(os.path.expanduser("~"), "WorkBuddy", "2026-07-10-22-37-49",
+                            "cjg-evo", "backend", "local_test", "run_skill_forge_cloud.py"))
         r = run([PY, "-u", alt]) if os.path.exists(alt) else None
         # 云端链路偶发限流/网络抖动：失败自动重试一次（真故障会持续失败）
         if r is not None and r.returncode != 0:

@@ -90,6 +90,12 @@ def _merge_remote(dir_, remote_rows):
                 "event": r.get("event"),
                 "weight": r.get("weight"),
             }
+            # G1 客观指标透传（行业无关，无 PII）
+            if r.get("metric_json"):
+                try:
+                    local["metric"] = json.loads(r["metric_json"])
+                except Exception:
+                    pass
             f.write(json.dumps(local, ensure_ascii=False) + "\n")
             existing.add(cid)
             added += 1

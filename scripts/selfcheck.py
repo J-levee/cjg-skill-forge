@@ -139,6 +139,17 @@ def t4_key_files():
           m is not None and (v_pj is None or v_pj == m.group(1)),
           f"SKILL.md={m.group(1) if m else '无'} plugin.json={v_pj}")
 
+    # A.0 云进化引导（创建技能时对创作者的强制引导，防重构丢失）
+    a0 = all(k in md for k in ("A.0 云进化引导", "forge-register.py register", "开启云同步"))
+    check("SKILL.md 含 A.0 云进化引导（注册/云同步/闭环三件套）", a0)
+
+    # A.1/A.2 交互执行强制（交互点不失效：指令响应表 + 会话钩子/收尾信号块）
+    a1 = all(k in md for k in ("A.1 交互指令响应", "signal_control.py view", "download_signals.py pull"))
+    a2 = all(k in md for k in ("A.2 会话钩子", "收尾信号块", "signals-log.jsonl", "apply_guard.py --snapshot",
+                               "session_hook.py begin", "session_hook.py end"))
+    check("SKILL.md 含 A.1 交互指令响应表（9 类指令强制执行）", a1)
+    check("SKILL.md 含 A.2 会话钩子（开始补传/拉回 + 收尾信号块 + apply 前瞻）", a2)
+
     # 发布前校验（随包发布器 --check，本地无网络；含触发词 SEO 校验）
     r = run([PY, os.path.join(HERE, "forge-publish.py"), "--path", SKILL_DIR, "--check"])
     check("forge-publish --check 发布前校验（含 SEO）",
@@ -204,6 +215,21 @@ def t5_local_signal_chain():
         r = run([PY, os.path.join(HERE, "writing_gate.py"), skill])
         check("writing_gate 可对任意目录运行（不崩溃）",
               r.returncode in (0, 2) and "Traceback" not in r.stderr, r.stdout[-200:])
+
+        # G4 session_hook 会话钩子：首跑不记 → 未收尾记 → end 标记（放末尾避免影响上方"1 条"断言）
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        n0 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
+        check("session_hook begin 首跑（仅建状态不记）", r.returncode == 0 and n0 == 0, r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        n1 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
+        check("session_hook 未收尾再 begin → 记 L0·no_signoff", r.returncode == 0 and n1 == 1,
+              r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "end", "--dir", skill])
+        check("session_hook end 标记收尾", r.returncode == 0)
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        n2 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
+        check("session_hook 已收尾再 begin → 不重复记", r.returncode == 0 and n2 == 1,
+              r.stdout[-150:])
     finally:
         import shutil
         shutil.rmtree(tmp, ignore_errors=True)

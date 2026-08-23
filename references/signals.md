@@ -6,9 +6,13 @@
 > 飞轮转的是「方法层标签」，不是「用户数据」。即使日志意外泄露，也不含任何可还原的内容。
 > **幂等键**：每行采集时生成 `signal_id`（UUIDv4），一路带到落库；服务端即便收到两次同 `signal_id` 也只落一条（见 §七 + 服务端 `client_signal_id` 唯一约束）。
 
-## 一、何时记
+## 一、何时记（会话钩子 + 收尾信号块）
 
-每次完成一个锻造/审视/重铸/清晰化会话后，若本地记录已开（安装即开，`.optin` 默认 `on`），追加一行 JSONL 到 `signals-log.jsonl`。
+**会话结束**（每次锻造/审视/重铸/清晰化会话收尾时，由 SKILL.md A.2 会话钩子执行）：若本地记录已开（安装即开，`.optin` 默认 `on`），向 `signals-log.jsonl` 追加一行 JSONL 方法层信号，并在对话末尾输出**收尾信号块** `[信号] L<层>·<事件>`（off 时输出 `[信号] off`）——收尾块是用户可验证的完成凭证。
+
+**会话开始**（首次交互时静默执行）：`upload_signals.py` 补传上次积累 + `download_signals.py pull` 拉回合并（幂等，与定时器重复无害；未开云同步则跳过）。
+
+**缺失检测（把沉默变可见）**：若上次会话未留下收尾信号块（`.optin=on` 且曾使用），本次会话开始钩子（`scripts/session_hook.py begin`）记录一行 `L0·no_signoff` 信号（`event=no_signoff`，`method_layer=L0`，无 metric）——证明会话发生过但 Agent 未打标签，让"没记"本身成为可见信号（供监控/整改）。首跑（无 `.session_state.json`）不检测防误报；`end` 钩子在收尾块之后标记已收尾。
 
 - 仅记录**方法层信号**（用了哪层能力、准不准、是否被纠正/放弃）。
 - 不记录问答内容、不记录用户身份。
@@ -117,6 +121,27 @@
 - **只读红线（不可逾越）**：捕获脚本**绝不写入/修改/删除任何技能内容文件**，只读哈希 + 写运行时产物（`.skill_edit_baseline.json` / `signals-log.jsonl`）。P0 阶段只度量、不改动；自动改进写回（loop apply）将在后续版本提供。
 - **隐私**：只记相对路径 + kind，不读文件内容、不记绝对路径/用户名（零 PII）。`.skill_edit_baseline.json` 同 `.optin` 等为运行时产物，不进包/不进 git。
 - **用户控制**：说「别记了」关本地采集（`.optin=off`）→ 捕获随之停止；`signals.md` 首次启用时透明告知用户。
+
+### 二·七 客观使用事件（G1 · 行业无关客观指标）
+
+> 客观事件回答「用了多少 / 成不成功 / 快不快」——与语义事件（为什么好用）互补，且**不依赖主观判断**（Agent 汇报的是客观事实）。由会话结束「客观使用汇报」`[使用]` 行产生，或由服务网关（如 SmartLib usage_log 插件）批量同步。
+
+- **事件**：`usage_call`（调用）/ `usage_error`（失败）/ `usage_slow`（耗时超标）——3 类共用同一 metric 结构。
+- **method_layer 固定 `L0`**（客观层，非 L1–L7 语义层）。
+- **metric 结构（行业无关 · 字段白名单 · 零 PII）**：
+  ```json
+  {
+    "calls": 10, "success": 8,
+    "errors": {"timeout": 1, "auth": 1},
+    "duration_avg_ms": 850,
+    "period": "session", "source": "agent"
+  }
+  ```
+  - 白名单字段：`calls / success / errors / duration_avg_ms / period / source`；`errors` 键仅 `timeout/auth/notfound/ratelimit/other`；`period ∈ {session, day}`；`source ∈ {gateway, agent}`。
+  - **禁止**：email / user_id / 内容 / 任意字段（字段白名单天然隔离 PII）；行业细节（如端点名）放 `note`。
+- **落库**：`signals.metric_json`（TEXT 存 JSON，服务端校验后写入）；旧数据为 NULL 不受影响。
+- **客户端产生**（会话结束 `[使用]` 行）：`event=usage_call` + metric 对象 → `upload_signals.py` 透传 → 服务端校验落库。
+- **服务网关产生**（插件式，SmartLib usage_log 为范例）：网关每日聚合 → 同步（剥 email/user_id，只留聚合指标）→ 同上校验落库。
 
 ## 三、两层授权模型（本地安装即开 / 云端上传默认关需显式开启）
 

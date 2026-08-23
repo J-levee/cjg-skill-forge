@@ -42,11 +42,13 @@ BACKOFF_BASE = 2.0
 
 # 标准白名单字段（本地 → 云端）
 EVENTS = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis",
-          "accept", "reject", "iteration", "edit_capture"}
+          "accept", "reject", "iteration", "edit_capture",
+          "usage_call", "usage_error", "usage_slow", "no_signoff"}   # G1 客观事件 + G4 缺失检测哨兵
 
 # P0 闭环质量新增字段（透传；剥字段降级时排除这些）
 NEW_FIELDS = {"accepted", "revision_rounds", "feedback_tag", "recurrence",
-              "attribution", "attribution_note"}
+              "attribution", "attribution_note",
+              "metric"}                                 # G1 客观指标（对象，服务端校验后落库 metric_json）
 
 
 def _is_unknown_column(err_text):
@@ -82,7 +84,7 @@ def resolve_ingest_url(skill_dir):
                 pass
     return None
 
-LAYERS = {"L1", "L2", "L3", "L4", "L5", "L6", "L7"}
+LAYERS = {"L0", "L1", "L2", "L3", "L4", "L5", "L6", "L7"}  # L0=客观层（G1 客观事件 usage_* 固定）
 
 
 def log(msg):
