@@ -122,23 +122,40 @@ def stage_b_produced():
         check("[创作者] 产出技能过写作规范门（W1–W8+W3a/W3b+W10 信号套件）",
               r.returncode == 0, r.stdout[-300:])
 
-        # B2 [平台] 发布前校验（forge-publish --check，含 SEO 描述长度）
+        # B2 [平台] 发布前校验（forge-publish --check，含 SEO 描述长度 + 注册状态段）
         r = run([PY, os.path.join(HERE, "forge-publish.py"), "--path", skill, "--check"])
         check("[平台] 产出技能 forge-publish --check 通过", r.returncode == 0, r.stdout[-250:])
+        check("[平台] 发布校验含注册状态段（P1-3 跨会话持久化闸门）",
+              "注册状态（跨会话持久化" in r.stdout, r.stdout[-300:])
 
         # B3 [平台] 描述 ≤1024（zip 安装兼容）+ 触发词命中
         desc = re.search(r"^description:.*?\n((?:  .*\n?)+)", open(os.path.join(skill, "SKILL.md"), encoding="utf-8").read(), re.M)
         dlen = len(re.sub(r"^  ", "", desc.group(1), flags=re.M).strip()) if desc else 0
         check("[平台] 产出技能 description ≤1024 字符", dlen <= 1024, f"当前 {dlen}")
 
-        # B5 [平台] 发布包合规：干净目录检查（在造信号产物之前——净化视角）
-        exclude = {".optin", ".anon_id", ".cloud_optin", ".cloud_token", ".skill_edit_baseline.json",
-                   ".capture.lock", ".uploaded_ids.txt", "signals-log.jsonl", ".apply-snapshots"}
+        # B5 [平台] 发布包合规：注入器 bootstrap 的 .optin/.cloud_optin 是"安装即开"运行时状态
+        #   （发布时由发布工具排除清单移除），其余采集运行时产物（signals-log/.uploaded_ids 等）不应出现
+        exclude = {".anon_id", ".cloud_token", ".skill_edit_baseline.json", ".capture.lock",
+                   ".uploaded_ids.txt", "signals-log.jsonl", ".apply-snapshots"}
         tops = {f for f in os.listdir(skill)}
         leaked = tops & exclude
-        check("[平台] 产出技能发布包无运行时产物泄露", not leaked, f"泄露 {leaked}")
+        check("[平台] 产出技能目录无采集运行时产物泄露（.optin/.cloud_optin 为安装即开，发布时排除）",
+              not leaked, f"泄露 {leaked}")
+        pub = open(os.path.join(SKILL_DIR, "scripts", "forge-publish.py"), encoding="utf-8").read()
+        covered = all(s in pub for s in (".optin", ".cloud_optin", ".anon_id"))
+        check("[平台] 发布排除清单覆盖 bootstrap 状态文件（.optin/.cloud_optin/.anon_id）", covered)
 
         # B4 [用户] 信号链路：用 B 自己的套件（闭环核心——B 能独立回传）
+        # 会话钩子（断点1 防线：session_hook 已注入且可运行）
+        r = run([PY, os.path.join(skill, "scripts", "session_hook.py"), "start", "--dir", skill])
+        check("[用户] B 自己的 session_hook start 可运行（注入成功）",
+              r.returncode == 0 and "Traceback" not in r.stderr, r.stdout[-150:])
+        r = run([PY, os.path.join(skill, "scripts", "session_hook.py"), "signal", "L3:helpful", "--dir", skill])
+        check("[用户] B 自己的 session_hook signal 写信号", r.returncode == 0 and "L3·helpful" in r.stdout)
+        r = run([PY, os.path.join(skill, "scripts", "session_hook.py"), "end", "--event", "L3:suggestion", "--dir", skill])
+        check("[用户] B 自己的 session_hook end --event（写收尾+标记）",
+              r.returncode == 0 and "已标记收尾" in r.stdout, r.stdout[-150:])
+        # 显式开启云同步 + 造一条测试信号 → dry-run 统计（注入器已 bootstrap .cloud_optin=off）
         sig = {"ts": "2026-08-22T10:00:00", "signal_id": "js-001", "client_signal_id": "js-001",
                "skill_slug": "joint-sample", "skill_version": "9.9.9", "method_layer": "L3",
                "event": "helpful", "weight": 1, "note": "joint", "anon_id": "joint-anon"}

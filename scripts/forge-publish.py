@@ -467,7 +467,7 @@ def print_setup_help(name: str):
 # ============================================================
 # 本地校验（--check，不触网）
 # ============================================================
-def check_only(skill_dir: Path, slug_hint: str) -> int:
+def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) -> int:
     print(f"\n{'='*60}")
     print(f"本地校验 (--check): {skill_dir}")
     print(f"{'='*60}")
@@ -592,6 +592,51 @@ def check_only(skill_dir: Path, slug_hint: str) -> int:
         else:
             print("    ⚠ security-audit.md 未检出明确结论（Benign/Suspicious/Malicious），请确认")
 
+    # ---- 信号闭环完整性（P1-2：产出技能 B 的信号套件必须闭环，缺一不可）----
+    if (skill_dir / "references" / "signals.md").exists():
+        print(f"\n  信号闭环完整性 (forge-signal-kit --check):")
+        try:
+            r = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                             "forge-signal-kit.py"),
+                                "--check", str(skill_dir)], capture_output=True, text=True, timeout=60)
+            loop_ok = r.returncode == 0
+            if loop_ok:
+                print("    ✓ 闭环完整（套件/引用/slug/状态/信号段）")
+            else:
+                last = [l for l in r.stdout.splitlines() if l.strip()][-1] if r.stdout else "未知"
+                print(f"    ✗ 闭环断裂：{last}")
+            ok = ok and loop_ok
+        except Exception as e:
+            print(f"    ⚠ 闭环校验执行异常: {e}")
+    else:
+        print(f"\n  信号闭环: 本技能无 signals.md（非信号技能，跳过闭环校验）")
+
+    # ---- 注册状态检查（P1-3：跨会话持久化 · .deploy/cloud_open.json · S8 发布前闸门）----
+    print(f"\n  注册状态（跨会话持久化 · .deploy/cloud_open.json）:")
+    dep = skill_dir / ".deploy" / "cloud_open.json"
+    reg_ok = False
+    if not dep.exists():
+        print("    ⚠ 未注册（.deploy/cloud_open.json 缺失）——该技能将无跨用户信号闭环")
+        print("      注册: python scripts/forge-register.py register → verify")
+    else:
+        try:
+            reg = json.loads(dep.read_text(encoding="utf-8"))
+            rslug = reg.get("slug", "")
+            rtoken = reg.get("token") or reg.get("signal_token") or ""
+            reg_ok = bool(rslug and rtoken)
+            if not reg_ok:
+                print(f"    ⚠ 注册文件不完整（slug={rslug or '空'} token={'有' if rtoken else '空'}）")
+            elif rslug != slug:
+                print(f"    ✗ 注册 slug 不匹配：文件={rslug} 本技能={slug}（防错配——注册了 A 却发布 B）")
+                reg_ok = False
+            else:
+                print(f"    ✓ 已注册（slug={rslug}）——跨用户信号闭环就绪")
+        except Exception as e:
+            print(f"    ⚠ 注册文件解析失败: {e}")
+    if require_register and not reg_ok:
+        print("    ✗ --require-register 已开启但技能未注册，阻断发布")
+        ok = False
+
     print(f"\n{'='*60}")
     print(f"{'✅ 校验通过，可发布' if ok else '⚠️ 校验有缺失，请先补全 frontmatter'}")
     print(f"{'='*60}\n")
@@ -631,6 +676,8 @@ def main():
                         help="changelog 含生产侧文案时仍发布（默认拒绝，防内部文案外泄）")
     parser.add_argument("--check", action="store_true",
                         help="仅本地校验（不调用网络/CLI）")
+    parser.add_argument("--require-register", action="store_true",
+                        help="强制要求技能已注册（.deploy/cloud_open.json 存在+slug 匹配+token 非空），否则阻断发布")
     parser.add_argument("--slug", default=None, help="覆盖 slug（默认读 frontmatter）")
     # 方案C：--token 已移除，发布工具不再向包内注入任何 token（包零密钥）
     parser.add_argument("--ingest-url", default=None,
@@ -660,7 +707,7 @@ def main():
     changelog = args.changelog or f"v{version}: 技能锻造炉自动化发布"
 
     if args.check:
-        sys.exit(check_only(skill_dir, slug))
+        sys.exit(check_only(skill_dir, slug, require_register=args.require_register))
 
     # 发布版本说明用户侧校验（披露范围铁律 · references/skill-writing-guide.md 第 6 节）：
     # 复用同目录 writing_gate.py 的禁词表（单一真相源）；显式传 changelog 才阻断校验。

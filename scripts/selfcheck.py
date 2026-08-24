@@ -155,6 +155,11 @@ def t4_key_files():
     check("forge-publish --check 发布前校验（含 SEO）",
           r.returncode == 0 and "校验通过" in r.stdout, r.stdout[-200:])
 
+    # P1-3 注册状态闸门（防重构丢失：发布校验必须含注册状态段）
+    fp = open(os.path.join(HERE, "forge-publish.py"), encoding="utf-8").read()
+    check("forge-publish 含注册状态检查段（P1-3 跨会话持久化闸门）",
+          "注册状态（跨会话持久化" in fp and "--require-register" in fp)
+
 
 def t5_local_signal_chain():
     section("⑤ 本地信号链路（临时目录内，零污染真实技能）")

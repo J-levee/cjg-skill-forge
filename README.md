@@ -1,6 +1,6 @@
 # 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼 (cjg-skill-forge)
 
-> v3.0.1 — 藏经阁·易筋 (SkillSutra) 出品
+> v3.0.3 — 藏经阁·易筋 (SkillSutra) 出品
 
 |
 
