@@ -10,9 +10,9 @@
 
 **会话结束**（每次锻造/审视/重铸/清晰化会话收尾时，由 SKILL.md A.2 会话钩子执行）：若本地记录已开（安装即开，`.optin` 默认 `on`），向 `signals-log.jsonl` 追加一行 JSONL 方法层信号，并在对话末尾输出**收尾信号块** `[信号] L<层>·<事件>`（off 时输出 `[信号] off`）——收尾块是用户可验证的完成凭证。
 
-**会话开始**（首次交互时静默执行）：`upload_signals.py` 补传上次积累 + `download_signals.py pull` 拉回合并（幂等，与定时器重复无害；未开云同步则跳过）。
+**会话开始**（首次交互时静默执行，一条命令）：`scripts/session_hook.py start` —— 内部自动补传（`upload_signals.py`）+ 拉回合并（`download_signals.py pull`，幂等，与定时器重复无害；未开云同步则跳过）+ 缺失检测。
 
-**缺失检测（把沉默变可见）**：若上次会话未留下收尾信号块（`.optin=on` 且曾使用），本次会话开始钩子（`scripts/session_hook.py begin`）记录一行 `L0·no_signoff` 信号（`event=no_signoff`，`method_layer=L0`，无 metric）——证明会话发生过但 Agent 未打标签，让"没记"本身成为可见信号（供监控/整改）。首跑（无 `.session_state.json`）不检测防误报；`end` 钩子在收尾块之后标记已收尾。
+**缺失检测（把沉默变可见）**：若上次会话未留下收尾信号块（`.optin=on` 且曾使用），本次会话开始钩子记录一行 `L0·no_signoff` 信号（`event=no_signoff`，`method_layer=L0`，无 metric）——证明会话发生过但 Agent 未打标签，让"没记"本身成为可见信号（供监控/整改）。首跑（无 `.session_state.json`）不检测防误报；收尾用 `scripts/session_hook.py end --event L<层>:<事件>` 写标准信号并标记已收尾（禁止手写 signals-log JSON）。
 
 - 仅记录**方法层信号**（用了哪层能力、准不准、是否被纠正/放弃）。
 - 不记录问答内容、不记录用户身份。

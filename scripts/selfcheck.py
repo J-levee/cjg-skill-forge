@@ -139,14 +139,14 @@ def t4_key_files():
           m is not None and (v_pj is None or v_pj == m.group(1)),
           f"SKILL.md={m.group(1) if m else '无'} plugin.json={v_pj}")
 
-    # A.0 云进化引导（创建技能时对创作者的强制引导，防重构丢失）
-    a0 = all(k in md for k in ("A.0 云进化引导", "forge-register.py register", "开启云同步"))
-    check("SKILL.md 含 A.0 云进化引导（注册/云同步/闭环三件套）", a0)
+    # A.0 云进化引导（创建技能时对创作者的强制引导，位于"快速上手"第 0 步，防重构丢失）
+    a0 = all(k in md for k in ("云进化引导", "第 0 步", "forge-register.py register", "开启云同步"))
+    check("SKILL.md 含 A.0 云进化引导（快速上手第 0 步：注册/云同步/闭环三件套）", a0)
 
     # A.1/A.2 交互执行强制（交互点不失效：指令响应表 + 会话钩子/收尾信号块）
     a1 = all(k in md for k in ("A.1 交互指令响应", "signal_control.py view", "download_signals.py pull"))
     a2 = all(k in md for k in ("A.2 会话钩子", "收尾信号块", "signals-log.jsonl", "apply_guard.py --snapshot",
-                               "session_hook.py begin", "session_hook.py end"))
+                               "session_hook.py start", "session_hook.py end --event"))
     check("SKILL.md 含 A.1 交互指令响应表（9 类指令强制执行）", a1)
     check("SKILL.md 含 A.2 会话钩子（开始补传/拉回 + 收尾信号块 + apply 前瞻）", a2)
 
@@ -216,19 +216,26 @@ def t5_local_signal_chain():
         check("writing_gate 可对任意目录运行（不崩溃）",
               r.returncode in (0, 2) and "Traceback" not in r.stderr, r.stdout[-200:])
 
-        # G4 session_hook 会话钩子：首跑不记 → 未收尾记 → end 标记（放末尾避免影响上方"1 条"断言）
-        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        # G4/G4b session_hook 命令中心：start 首跑不记 → signal 写语义 → start 未收尾记 no_signoff
+        # → end --event 写收尾+标记 → start 已收尾不重复记（放末尾避免影响上方"1 条"断言）
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "start", "--dir", skill])
         n0 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
-        check("session_hook begin 首跑（仅建状态不记）", r.returncode == 0 and n0 == 0, r.stdout[-150:])
-        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        check("session_hook start 首跑（仅建状态不记）", r.returncode == 0 and n0 == 0, r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "signal", "L3:helpful", "--dir", skill])
+        check("session_hook signal 写语义信号", r.returncode == 0 and "L3·helpful" in r.stdout, r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "start", "--dir", skill])
         n1 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
-        check("session_hook 未收尾再 begin → 记 L0·no_signoff", r.returncode == 0 and n1 == 1,
+        check("session_hook 未收尾再 start → 记 L0·no_signoff", r.returncode == 0 and n1 == 1,
               r.stdout[-150:])
-        r = run([PY, os.path.join(HERE, "session_hook.py"), "end", "--dir", skill])
-        check("session_hook end 标记收尾", r.returncode == 0)
-        r = run([PY, os.path.join(HERE, "session_hook.py"), "begin", "--dir", skill])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "end", "--event", "L3:suggestion", "--dir", skill])
+        n_e = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("suggestion")
+        check("session_hook end --event 写收尾信号+标记", r.returncode == 0 and n_e >= 1, r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "usage", "--calls", "2", "--success", "1",
+                 "--errors", "timeout=1", "--dir", skill])
+        check("session_hook usage 写客观信号", r.returncode == 0 and "usage_call" in r.stdout, r.stdout[-150:])
+        r = run([PY, os.path.join(HERE, "session_hook.py"), "start", "--dir", skill])
         n2 = open(os.path.join(skill, "signals-log.jsonl"), encoding="utf-8").read().count("no_signoff")
-        check("session_hook 已收尾再 begin → 不重复记", r.returncode == 0 and n2 == 1,
+        check("session_hook 已收尾再 start → 不重复记", r.returncode == 0 and n2 == 1,
               r.stdout[-150:])
     finally:
         import shutil

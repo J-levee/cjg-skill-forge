@@ -24,6 +24,7 @@
 """
 import json
 import os
+import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -31,6 +32,9 @@ from datetime import datetime, timezone
 STATE_NAME = ".session_state.json"
 LOCK_NAME = ".session_hook.lock"
 SIGNALS_MD = os.path.join("references", "signals.md")
+EVENTS_ALLOWED = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis",
+                  "accept", "reject", "iteration", "edit_capture"}
+LAYERS_ALLOWED = {f"L{i}" for i in range(1, 8)}
 
 
 def _utcnow_iso():
@@ -140,12 +144,115 @@ def cmd_begin(skill_dir):
     return 0
 
 
-def cmd_end(skill_dir):
-    """会话结束钩子：标记已收尾（在输出收尾块、写收尾信号之后调用）。"""
+def cmd_start(skill_dir):
+    """会话开始钩子（一条命令完成三件事）：补传 + 拉回 + 缺失检测。
+    ——把 A.2 的 3 条命令收敛为 1 条，Agent 只需执行一次，确定性更高。"""
     name = os.path.basename(skill_dir.rstrip("/\\"))
     if not os.path.exists(os.path.join(skill_dir, SIGNALS_MD)):
         print(f"[session] [{name}] 非信号技能，跳过")
         return 0
+    # 1) 补传上次积累（upload_signals 默认扫描 ~/.workbuddy/skills，未开云同步内部跳过）
+    try:
+        subprocess.run([sys.executable, os.path.join(HERE, "upload_signals.py")],
+                       capture_output=True, timeout=120)
+    except Exception:
+        pass
+    # 2) 拉回云端历史（只对本技能；无配置/无 anon 内部跳过）
+    try:
+        subprocess.run([sys.executable, os.path.join(HERE, "download_signals.py"),
+                        "pull", "--dir", skill_dir], capture_output=True, timeout=120)
+    except Exception:
+        pass
+    # 3) begin 缺失检测（防误报：首跑仅建状态）
+    cmd_begin(skill_dir)
+    return 0
+
+
+def _append_method_signal(skill_dir, layer, event, note=""):
+    """写一条语义信号（标准 JSON，供 Agent 收尾/交互时调用，避免手写格式错误）。"""
+    if event not in EVENTS_ALLOWED:
+        print(f"[session] 未知事件: {event}（允许: {sorted(EVENTS_ALLOWED)}）")
+        return 1
+    if layer not in LAYERS_ALLOWED:
+        print(f"[session] 未知层: {layer}（允许: {sorted(LAYERS_ALLOWED)}）")
+        return 1
+    name = os.path.basename(skill_dir.rstrip("/\\"))
+    if not os.path.exists(os.path.join(skill_dir, SIGNALS_MD)):
+        print(f"[session] [{name}] 非信号技能，跳过")
+        return 0
+    if not _optin_on(skill_dir):
+        print(f"[session] [{name}] 本地记录关闭，跳过")
+        return 0
+    sig = {
+        "ts": _utcnow_iso(),
+        "signal_id": str(uuid.uuid4()),
+        "client_signal_id": str(uuid.uuid4()),
+        "skill_slug": name,
+        "skill_version": _read_skill_version(skill_dir),
+        "method_layer": layer,
+        "event": event,
+        "weight": 1,
+        "note": note,
+        "anon_id": _read_anon_id(skill_dir) or "",
+    }
+    ok = _append_signal(skill_dir, sig)
+    print(f"[session] [{name}] 已记录信号 {layer}·{event}{('（'+note[:40]+'）') if note else ''}（{'✓' if ok else '✗ 写入失败'}）")
+    return 0 if ok else 1
+
+
+def cmd_signal(skill_dir, layer, event, note=""):
+    return _append_method_signal(skill_dir, layer, event, note)
+
+
+def cmd_usage(skill_dir, calls, success, errors="", duration=0, note=""):
+    """写一条客观使用信号（usage_call，L0 + metric）——Agent 陈述客观事实，脚本生成标准 JSON。"""
+    name = os.path.basename(skill_dir.rstrip("/\\"))
+    if not os.path.exists(os.path.join(skill_dir, SIGNALS_MD)):
+        print(f"[session] [{name}] 非信号技能，跳过")
+        return 0
+    if not _optin_on(skill_dir):
+        print(f"[session] [{name}] 本地记录关闭，跳过")
+        return 0
+    errors_map = {}
+    if errors:
+        for kv in errors.split(","):
+            if "=" in kv:
+                k, v = kv.split("=", 1)
+                errors_map[k.strip()] = int(v)
+    metric = {"calls": int(calls), "success": int(success), "period": "session", "source": "agent"}
+    if errors_map:
+        metric["errors"] = errors_map
+    if duration:
+        metric["duration_avg_ms"] = int(duration)
+    sig = {
+        "ts": _utcnow_iso(),
+        "signal_id": str(uuid.uuid4()),
+        "client_signal_id": str(uuid.uuid4()),
+        "skill_slug": name,
+        "skill_version": _read_skill_version(skill_dir),
+        "method_layer": "L0",
+        "event": "usage_call",
+        "weight": 1,
+        "note": note,
+        "anon_id": _read_anon_id(skill_dir) or "",
+        "metric": metric,
+    }
+    ok = _append_signal(skill_dir, sig)
+    print(f"[session] [{name}] 已记录客观使用 usage_call（calls={calls} success={success}）（{'✓' if ok else '✗ 写入失败'}）")
+    return 0 if ok else 1
+
+
+def cmd_end(skill_dir, event=None):
+    """会话结束钩子：写收尾信号（可选 --event）+ 标记已收尾。
+    ——Agent 只需一条命令：先写信号（脚本生成标准 JSON），再标记收尾。"""
+    name = os.path.basename(skill_dir.rstrip("/\\"))
+    if not os.path.exists(os.path.join(skill_dir, SIGNALS_MD)):
+        print(f"[session] [{name}] 非信号技能，跳过")
+        return 0
+    if event:
+        rc = _append_method_signal(skill_dir, *event.split(":", 1))
+        if rc:
+            return rc
     if not _optin_on(skill_dir):
         print(f"[session] [{name}] 本地记录关闭，跳过")
         return 0
@@ -155,17 +262,44 @@ def cmd_end(skill_dir):
 
 
 def main():
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    opts = [a for a in sys.argv[1:] if a.startswith("--")]
-    if not args or args[0] not in ("begin", "end") or "--help" in opts or "-h" in opts:
-        print(__doc__)
+    import argparse
+    p = argparse.ArgumentParser(prog="session_hook.py", description=__doc__.splitlines()[0])
+    p.add_argument("--dir", default=None, help="技能目录（默认=脚本所在目录的上一级）")
+    sub = p.add_subparsers(dest="cmd")
+    ps = sub.add_parser("start", help="会话开始：补传+拉回+缺失检测（一条命令）")
+    ps.add_argument("--dir", default=None)
+    sp = sub.add_parser("signal", help="写一条语义信号")
+    sp.add_argument("--dir", default=None)
+    sp.add_argument("event", help="格式 L<层>:<事件>，如 L3:helpful")
+    sp.add_argument("--note", default="", help="仅相对路径/标签等零 PII 备注")
+    su = sub.add_parser("usage", help="写一条客观使用信号（usage_call）")
+    su.add_argument("--dir", default=None)
+    su.add_argument("--calls", required=True, type=int, help="调用次数")
+    su.add_argument("--success", required=True, type=int, help="成功次数")
+    su.add_argument("--errors", default="", help="错误分布 k=v,k=v（如 timeout=1,auth=2）")
+    su.add_argument("--duration", default=0, type=int, help="平均耗时 ms")
+    su.add_argument("--note", default="", help="行业细节（如 endpoint=search(v1)）")
+    se = sub.add_parser("end", help="会话结束：写收尾信号+标记收尾")
+    se.add_argument("--dir", default=None)
+    se.add_argument("--event", default=None, help="格式 L<层>:<事件>，如 L3:helpful")
+    args = p.parse_args()
+    if not args.cmd:
+        p.print_help()
         return 2
-    cmd = args[0]
-    skill_dir = "."
-    for i, a in enumerate(sys.argv[1:]):
-        if a == "--dir" and i + 1 < len(sys.argv[1:]):
-            skill_dir = sys.argv[i + 2]
-    return cmd_begin(skill_dir) if cmd == "begin" else cmd_end(skill_dir)
+    # 技能目录：--dir（主或子命令）优先，否则用脚本位置推导（scripts/ 的父目录）
+    sub_args = getattr(args, args.cmd, None)
+    skill_dir = args.dir or (sub_args.dir if sub_args else None) \
+        or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if args.cmd == "start":
+        return cmd_start(skill_dir)
+    if args.cmd == "signal":
+        return cmd_signal(skill_dir, *args.event.split(":", 1), note=args.note)
+    if args.cmd == "usage":
+        return cmd_usage(skill_dir, args.calls, args.success, errors=args.errors,
+                         duration=args.duration, note=args.note)
+    if args.cmd == "end":
+        return cmd_end(skill_dir, event=args.event)
+    return 2
 
 
 if __name__ == "__main__":
