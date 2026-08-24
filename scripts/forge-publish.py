@@ -176,14 +176,33 @@ def generic_sanitize_config(skill_dir: Path) -> dict:
 
 
 def backup_and_remove(skill_dir: Path, filenames: list) -> dict:
+    """临时移走发布排除项（文件/目录都支持：目录用 copytree+rmtree），发布后 restore_files 还原。
+
+    原子性：中途任何一项失败 → 立即还原已移走项再抛出异常（防止技能目录缺件、备份散落 /tmp）。
+    """
     backups = {}
-    for fname in filenames:
-        src = skill_dir / fname
-        if src.exists():
+    try:
+        for fname in filenames:
+            src = skill_dir / fname
+            if not src.exists():
+                continue
             dst = Path(tempfile.gettempdir()) / f"_forgepub_{skill_dir.name}_{fname}"
-            shutil.copy2(src, dst)
-            src.unlink()
+            # 幂等：上次异常残留的同名备份先清，避免 copytree 目标已存在导致本次发布失败
+            if dst.exists():
+                if dst.is_dir():
+                    shutil.rmtree(dst)
+                else:
+                    dst.unlink(missing_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dst)
+                shutil.rmtree(src)
+            else:
+                shutil.copy2(src, dst)
+                src.unlink()
             backups[fname] = dst
+    except Exception:
+        restore_files(skill_dir, backups)
+        raise
     return backups
 
 
@@ -192,6 +211,13 @@ def restore_files(skill_dir: Path, backups: dict):
         dst = skill_dir / fname
         if backup_path == _GENERATED:
             dst.unlink(missing_ok=True)
+            continue
+        if backup_path.is_dir():
+            # 目标残留（如原目录删除失败）时先清，以备份为准还原，保证可重入
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(backup_path, dst)
+            shutil.rmtree(backup_path)
         else:
             shutil.copy2(backup_path, dst)
             backup_path.unlink(missing_ok=True)
@@ -203,6 +229,27 @@ def get_skillhub_token() -> Optional[str]:
         return creds.get("user", {}).get("token")
     except Exception:
         return None
+
+
+# footer/coverage.md 是锻造炉产物的标记：发布时必须带信号套件闭环，缺则阻断（P0-3）
+FORGE_FOOTER_RE = re.compile(r"由[「『]?技能锻造炉[」』]?")
+
+
+def _is_forge_product(skill_dir: Path) -> bool:
+    """识别「锻造炉产物」：SKILL.md 含 footer（『由技能锻造炉』）或存在 references/coverage.md。
+
+    锻造炉产出的技能被当作自锻成品：能力再完整，发布时也必须带信号回传套件（闭环），
+    否则终端用户拿到的是「无回传能力」的断链技能——与 A.0 同类病根（能力完整但默认不触发）。
+    """
+    try:
+        md = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    except Exception:
+        md = ""
+    if FORGE_FOOTER_RE.search(md):
+        return True
+    if (skill_dir / "references" / "coverage.md").exists():
+        return True
+    return False
 
 
 def notice_registration(skill_dir: Path, slug: str):
@@ -592,7 +639,7 @@ def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) 
         else:
             print("    ⚠ security-audit.md 未检出明确结论（Benign/Suspicious/Malicious），请确认")
 
-    # ---- 信号闭环完整性（P1-2：产出技能 B 的信号套件必须闭环，缺一不可）----
+    # ---- 信号闭环完整性（P1-2 + P0-3：锻造炉产物 B 的信号套件必须闭环，缺则阻断发布）----
     if (skill_dir / "references" / "signals.md").exists():
         print(f"\n  信号闭环完整性 (forge-signal-kit --check):")
         try:
@@ -608,8 +655,15 @@ def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) 
             ok = ok and loop_ok
         except Exception as e:
             print(f"    ⚠ 闭环校验执行异常: {e}")
+    elif _is_forge_product(skill_dir):
+        # P0-3：锻造炉产物但缺信号套件 → 硬阻断（防「能力完整但无回传」的断链技能流入终端用户）
+        print(f"\n  信号闭环: ✗ 本技能是锻造炉产物（footer 含『由技能锻造炉』或存在 coverage.md），"
+              f"但缺 references/signals.md")
+        print(f"    → 锻造炉产物发布必须带信号回传套件（闭环），缺则阻断发布。")
+        print(f"      修复: python {FORGE_SCRIPTS / 'forge-signal-kit.py'} inject {skill_dir}")
+        ok = False
     else:
-        print(f"\n  信号闭环: 本技能无 signals.md（非信号技能，跳过闭环校验）")
+        print(f"\n  信号闭环: 本技能无 signals.md 且非锻造炉产物（第三方技能），跳过闭环校验")
 
     # ---- 注册状态检查（P1-3：跨会话持久化 · .deploy/cloud_open.json · S8 发布前闸门）----
     print(f"\n  注册状态（跨会话持久化 · .deploy/cloud_open.json）:")

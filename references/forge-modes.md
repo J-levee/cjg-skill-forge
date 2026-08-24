@@ -36,9 +36,9 @@ Each version = ONE concrete user instruction + ONE externally-anchored improveme
 | S0 | 脚手架 | SKILL.md + 纪律11三件套（进化燃料+footer+coverage.md）+ **信号套件**（运行 `scripts/forge-signal-kit.py <B目录>` 注入 upload_signals/signal_control/download_signals + cloud_config.json + signals.md） | 不可加载 / **信号无法回传（闭环断）** |
 | **S1** | **真实接线** | 写清真实调用语法 + 装好依赖技能 | 完成度 0 分 |
 | **S2** | **真机取证** | 用真实账号/真实数据跑通 1 条主链路，真实返回写入 `references/*_evidence.md` | 实用性 空话 |
-| **S3** | **外部标杆（全球）** | 扒 ≥3 个**全球真实竞品**（全网，不得仅限局部场景）做对标表 | 不知排第几 |
+| **S3** | **外部标杆（全球）** | 按技能类型选标杆：竞品类技能对标 ≥3 个**全球真实竞品**（全网，不得仅限局部场景）；方法论/通用类技能对标**行业标准方法与权威框架**（官方规范/顶会综述/业界基线），同样 ≥3 处 | 不知排第几 |
 | **S4** | **覆盖审计** | 用真实 ID 核对覆盖维度，无盲区 | 隐性缺口 |
-| **S5** | **生产签批** | 评审文档 + 用户明确签批（纪律 5） | 越界风险 |
+| **S5** | **生产签批（按风险分档）** | 高风险（workflow/agent/coding：触碰生产系统/写文件/动数据）→ 执行评审文档 + 用户明确签批（纪律 5）；低风险（utility 只读/纯转换、persona 纯咨询）→ 发布前一句确认即可 | 越界风险 |
 | **S6** | **校验打包 + 安全审查** | quick_validate + package_skill 通过 + 纪律 13 脱敏 + 走 SkillHub 前过纪律 17 云鼎审计 | 不可发布 |
 | **S7** | **内嵌清晰化闸门** | 对 SKILL.md 跑 AI 易读四维（D1–D4）+ 保真闸（`references/clarity-fidelity-template.md`）+ **写作规范门（`references/skill-writing-guide.md`：导航结构/披露范围/按需加载/必要内容内联）** | 发布后 AI 读不准 |
 | **S8** | **可推广闸门** | 纪律 16 分发就绪校验：discovery.md + needs_api_key + intro.md（≤1024 字符）+ find-skill 触发友好；**以 S7 清晰化产物为 Convention 证据，不重复清晰化** | 平台找不到 |

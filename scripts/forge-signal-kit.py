@@ -37,6 +37,15 @@ KIT = [
     ("references/signals.md", "references/signals.md"),
 ]
 
+SECTION_ZERO_TEMPLATE = """## 零、进化燃料 · 本地即开 · 云端需显式开启
+
+> **📋 安装须知**：本技能安装后**本地记录默认开启**（只记方法层标签，零原文零身份，留你本机），用于本技能自我迭代：
+> - **本地记录**：每次使用后自动记一行方法层标签（只记方法名，零原文零身份）。
+> - **云端上传（零密钥 · 默认关）**：需你**显式说「开启云同步」**才匿名回传反馈信号到藏经阁·易筋平台，跨用户聚合，让技能越用越牛。
+> - 说「开启云同步」参与跨用户进化；「别传了」关云端（本地不受影响）；「别记了」全关。
+> - 📊 透明度：说"查看我的信号"看记录、"我的技能成长"看进展、"删除我的信号"清空本机记录。
+"""
+
 A1A2_TEMPLATE = """## A.1 交互指令响应（强制 · 不可忽略）
 
 用户说出下列任一指令，**必须立即执行对应动作**，不得当作闲聊：
@@ -118,6 +127,35 @@ def _bootstrap_state(skill_dir, force=False):
     if not os.path.exists(cloud) or force:
         with open(cloud, "w", encoding="utf-8") as f:
             f.write("off")
+    return True
+
+
+def _inject_section_zero(skill_dir, force=False):
+    """目标技能 SKILL.md 缺 §零（进化燃料）时补一段标准引导（P0-4：云端显式开启 + 透明度命令）。
+    已有 §零 一律不覆盖（保护创作者自己的引导文案，force 也不覆盖）。返回是否注入。"""
+    p = os.path.join(skill_dir, "SKILL.md")
+    md = open(p, encoding="utf-8").read()
+    if "## 零、进化燃料" in md:
+        return False
+    block = SECTION_ZERO_TEMPLATE.strip() + "\n\n"
+    if md.startswith("---"):
+        end = md.find("\n---", 3)
+        if end != -1:
+            nl = md.find("\n", end + 1)
+            rest = md[nl + 1:]
+            # 插在第一个主标题（# ）之后（对齐锻造炉自身结构：标题 → §零 → 正文）
+            m = re.search(r"(^# .*$)", rest, re.M)
+            if m:
+                anchor = m.end(0)
+                md = md[:nl + 1] + rest[:anchor] + "\n\n" + block.rstrip() + "\n" + rest[anchor:]
+            else:
+                md = md[:nl + 1] + block.rstrip() + "\n\n" + rest
+        else:
+            md = block + md
+    else:
+        md = block + md
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(md)
     return True
 
 
@@ -213,6 +251,9 @@ def inject(skill_dir, force=False):
     # 状态文件 bootstrap（断点3）
     _bootstrap_state(skill_dir, force)
     print(f"  ✓ bootstrap 状态文件: .optin=on（本地记录安装即开）· .cloud_optin=off（云端默认关）")
+    # §零 引导段注入（P0-4：终端用户可理解的透明说明——本地即开/云端显式开启/透明度命令）
+    injected_zero = _inject_section_zero(skill_dir, force)
+    print(f"  {'✓ 注入' if injected_zero else '- 已有'} §零 进化燃料引导（本地即开 · 云端显式开启 · 透明度命令）")
     # A.1/A.2 段落注入（断点4）
     _inject_a1a2(skill_dir, force)
     print(f"  ✓ SKILL.md 注入 A.1 交互指令表 + A.2 会话钩子段")
@@ -223,6 +264,10 @@ def inject(skill_dir, force=False):
         return False
     print(f"✓ 信号套件完整且闭环就绪: {skill_dir}")
     print(f"  下一步：发布前跑 writing_gate（W10 校验信号套件）——B 的终端用户开启云同步后即可参与进化闭环。")
+    # P1-3/#13 注册指引（面向创作者，仅终端提示，不写入技能包）：
+    # 跨用户信号归因需要 slug 已注册；进化闭环（提案审核）由「技能锻造炉」统一管理。
+    print(f"  发布前注册（创作者）：python {os.path.join(HERE, 'forge-register.py')} register → verify（token 存 .deploy/，不进包）")
+    print(f"  进化闭环管理：回「技能锻造炉」（SkillHub slug cjg-skill-forge）——说『看看提案 / 应用提案 <id>』审核改进。")
     return True
 
 

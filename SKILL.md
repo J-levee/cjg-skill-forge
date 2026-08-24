@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 3.0.3
+version: 3.0.4
 description: |
   技能锻造炉 / Skill Forge —— 元技能：**创建、升级、重铸、审计**一个「全球最牛」的 WorkBuddy / AI 技能，并让它越用越强。**锻造**模式：从零打造新技能（带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、生产签批、真机验证）；**审视**模式：10 维加权评分尺，给任何技能（含它自己）打分，判断够不够好；**重铸**模式：审计并整合本机重叠技能、合并同类、整理技能库，给出重铸计划与推荐基座；还能让技能更 AI 易读（清晰化）。当你想"做到最牛"、创建一个 XX 技能、升级我的技能、review this skill、整理技能、合并同类、skill 怎么改、SKILL.md 怎么写、怎么制作一个 AI 技能时，用它。
 
@@ -46,6 +46,9 @@ SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge ~/.workbuddy/skills/cjg-
 
 然后 `python scripts/xxx.py ...` 运行。**禁止在用户项目目录下直接 `python scripts/xxx.py`**（相对路径找不到文件会静默失败）。`scripts/session_hook.py` 支持不带 `--dir` 自动推导技能目录（由脚本位置向上定位），最稳。
 
+> **校验/打包脚本在 skill-creator 插件（不在本技能 scripts/）**：`quick_validate.py` / `package_skill.py` 位于 WorkBuddy 内置 skill-creator 插件 `~/.workbuddy/plugins/**/skill-skill-creator/<版本>/scripts/`。运行前先定位：
+> `VALIDATOR=$(find ~/.workbuddy/plugins -name quick_validate.py 2>/dev/null | head -1) && python "$VALIDATOR" <技能目录>`（package_skill.py 同理）。
+
 ---
 
 ## 快速上手 / Quick start（30 秒）
@@ -67,7 +70,7 @@ SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge ~/.workbuddy/skills/cjg-
 2. **发布前审计** → 按「模式 B」路由 → 载入评分尺打 10 维分。
 3. **技能库变乱/重叠** → 按「模式 C」路由 → `recast_scan.py` 出重铸报告（只读）。
 4. **技能 AI 读不准** → 按「模式 D」路由 → S7 清晰化四维 + 保真闸。
-5. **每次版本后**：`quick_validate.py` + `package_skill.py`；发布走 `forge-publish.py`（详见纪律 11 ④）。
+5. **每次版本后**：跑 skill-creator 插件的 `scripts/quick_validate.py` + `scripts/package_skill.py`（定位见「命令执行约定」）；发布走 `forge-publish.py`（详见纪律 11 ④）。
 
 ---
 
@@ -109,7 +112,7 @@ SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge ~/.workbuddy/skills/cjg-
 | **S3** | 外部标杆（全球） | ≥3 个全球真实竞品对标表 | 不知排第几 |
 | **S4** | 覆盖审计 | 真实 ID 核对覆盖维度 | 隐性缺口 |
 | **S5** | 生产签批 | 评审文档 + 用户明确签批（纪律 5） | 越界风险 |
-| **S6** | 校验+安全审查 | quick_validate/package_skill + 纪律 13 脱敏 + SkillHub 路径过纪律 17 | 不可发布 |
+| **S6** | 校验+安全审查 | skill-creator 校验打包（quick_validate/package_skill，路径见「命令执行约定」）+ 纪律 13 脱敏 + SkillHub 路径过纪律 17 | 不可发布 |
 | **S7** | 内嵌清晰化闸门 | AI 易读四维（D1–D4）+ 保真闸 | AI 读不准 |
 | **S8** | 可推广闸门 | 纪律 16 分发就绪（discovery/intro ≤1024 字符） | 平台找不到 |
 | **S9** | 联合测试闸门 | `joint_test.py` 三侧三方（创作者/用户/平台 × 锻造炉/产出技能/藏经阁）全绿才下一步（纪律 18） | 带病发布 |
@@ -183,7 +186,7 @@ SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge ~/.workbuddy/skills/cjg-
 
 - SKILL.md 精简；细节在 `references/`（本文件即导航版范本）。
 - `description` 单行双引号，无 `<>`，≤1024 字符。
-- 校验：`quick_validate.py <dir>` → `package_skill.py <dir>`（内置 skill-creator `scripts/`）。
+- 校验：skill-creator 插件 `scripts/quick_validate.py <dir>` → `scripts/package_skill.py <dir>`（定位见「命令执行约定」）。
 - persona 技能：知识边界 + 置信度分级（详见 `references/persona-design.md`）。
 - **导航式结构**：本技能采用"SKILL.md 只留路由与红线 + 细节按需加载"的结构（模式细节与纪律全文在 references/，触发到才读取），让用户和 Agent 都能快速读完、节省对话上下文。
 
@@ -219,7 +222,7 @@ SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge ~/.workbuddy/skills/cjg-
 - `references/yunding-security-audit.md` — 云鼎安全审计触发 + 三档阈值（纪律 17）
 - `references/security-audit.md` — 本技能安全审计结论（随包）
 - `references/discovery.md` / `references/intro.md` — 分发就绪卡 / 跨平台介绍（纪律 16 产物）
-- `references/coverage-seeding.md` — coverage.md 自动播种规则（纪律 11 ③）
+- `references/coverage-seeding.md` — coverage.md 自动播种规则（纪律 11 ③；落地脚本 `scripts/coverage_seed.py`）
 
 **自测与运行**
 - `scripts/joint_test.py` — **三侧三方联合测试入口**（纪律 18 / S9 闸门）：锻造炉自身 + 产出技能 + 藏经阁云端 × 创作者/用户/平台，每次改动必跑全绿才下一步；`--with-cloud` 追加真实云端链路

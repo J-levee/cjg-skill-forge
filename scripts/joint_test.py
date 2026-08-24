@@ -128,6 +128,20 @@ def stage_b_produced():
         check("[平台] 发布校验含注册状态段（P1-3 跨会话持久化闸门）",
               "注册状态（跨会话持久化" in r.stdout, r.stdout[-300:])
 
+        # B2.1 [平台] P0-3 负例：锻造炉产物（footer+coverage.md）缺信号套件 → 发布闸门必须阻断
+        #   （防「能力完整但无回传」的断链技能流入终端用户——与 A.0 同类病根）
+        broken = os.path.join(tmp, "broken-forge-product")
+        os.makedirs(os.path.join(broken, "references"))
+        _write(os.path.join(broken, "SKILL.md"),
+               "---\nslug: broken-forge-product\nname: broken-forge-product\nversion: 1.0.0\n"
+               "description: 'Use when testing the broken forge-product gate'\n---\n\n"
+               "# Broken Forge Product\n\n⚙️ 由技能锻造炉锻造\n")
+        _write(os.path.join(broken, "references", "coverage.md"),
+               "# 覆盖维度\n> 触发到覆盖审计时加载。\n\n- **能力**: 样例\n")
+        rb = run([PY, os.path.join(HERE, "forge-publish.py"), "--path", broken, "--check"])
+        check("[平台] P0-3 锻造炉产物缺信号套件被发布闸门阻断",
+              rb.returncode != 0 and "锻造炉产物" in rb.stdout, rb.stdout[-300:])
+
         # B3 [平台] 描述 ≤1024（zip 安装兼容）+ 触发词命中
         desc = re.search(r"^description:.*?\n((?:  .*\n?)+)", open(os.path.join(skill, "SKILL.md"), encoding="utf-8").read(), re.M)
         dlen = len(re.sub(r"^  ", "", desc.group(1), flags=re.M).strip()) if desc else 0

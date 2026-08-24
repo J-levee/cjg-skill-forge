@@ -168,6 +168,17 @@ def cmd_start(skill_dir):
     return 0
 
 
+def _split_event(event):
+    """拆分 `L<层>:<事件>` 或 `L<层>·<事件>`（Agent 可能照 SKILL.md 展示块 `[信号] L3·helpful`
+    传中圆点 `·`——只认 `:` 会 TypeError 崩溃，P1-2 修复）。
+    返回 (layer, event)；无分隔符时 event 为空串，由 _append_method_signal 报"未知事件"而非崩溃。"""
+    for sep in (":", "·"):
+        if sep in event:
+            layer, ev = event.split(sep, 1)
+            return layer.strip(), ev.strip()
+    return event.strip(), ""
+
+
 def _append_method_signal(skill_dir, layer, event, note=""):
     """写一条语义信号（标准 JSON，供 Agent 收尾/交互时调用，避免手写格式错误）。"""
     if event not in EVENTS_ALLOWED:
@@ -250,7 +261,7 @@ def cmd_end(skill_dir, event=None):
         print(f"[session] [{name}] 非信号技能，跳过")
         return 0
     if event:
-        rc = _append_method_signal(skill_dir, *event.split(":", 1))
+        rc = _append_method_signal(skill_dir, *_split_event(event))
         if rc:
             return rc
     if not _optin_on(skill_dir):
@@ -270,7 +281,7 @@ def main():
     ps.add_argument("--dir", default=None)
     sp = sub.add_parser("signal", help="写一条语义信号")
     sp.add_argument("--dir", default=None)
-    sp.add_argument("event", help="格式 L<层>:<事件>，如 L3:helpful")
+    sp.add_argument("event", help="格式 L<层>:<事件> 或 L<层>·<事件>，如 L3:helpful / L3·helpful")
     sp.add_argument("--note", default="", help="仅相对路径/标签等零 PII 备注")
     su = sub.add_parser("usage", help="写一条客观使用信号（usage_call）")
     su.add_argument("--dir", default=None)
@@ -281,7 +292,7 @@ def main():
     su.add_argument("--note", default="", help="行业细节（如 endpoint=search(v1)）")
     se = sub.add_parser("end", help="会话结束：写收尾信号+标记收尾")
     se.add_argument("--dir", default=None)
-    se.add_argument("--event", default=None, help="格式 L<层>:<事件>，如 L3:helpful")
+    se.add_argument("--event", default=None, help="格式 L<层>:<事件> 或 L<层>·<事件>，如 L3:helpful / L3·helpful")
     args = p.parse_args()
     if not args.cmd:
         p.print_help()
@@ -293,7 +304,8 @@ def main():
     if args.cmd == "start":
         return cmd_start(skill_dir)
     if args.cmd == "signal":
-        return cmd_signal(skill_dir, *args.event.split(":", 1), note=args.note)
+        layer, ev = _split_event(args.event)
+        return cmd_signal(skill_dir, layer, ev, note=args.note)
     if args.cmd == "usage":
         return cmd_usage(skill_dir, args.calls, args.success, errors=args.errors,
                          duration=args.duration, note=args.note)

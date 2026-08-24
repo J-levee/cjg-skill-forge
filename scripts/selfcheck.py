@@ -159,6 +159,9 @@ def t4_key_files():
     fp = open(os.path.join(HERE, "forge-publish.py"), encoding="utf-8").read()
     check("forge-publish 含注册状态检查段（P1-3 跨会话持久化闸门）",
           "注册状态（跨会话持久化" in fp and "--require-register" in fp)
+    # P0-3 锻造炉产物识别闸门（防重构丢失：footer/coverage.md 缺信号套件必阻断）
+    check("forge-publish 含锻造炉产物识别闸门（P0-3：缺信号套件必阻断）",
+          "锻造炉产物" in fp and "_is_forge_product" in fp)
 
 
 def t5_local_signal_chain():
