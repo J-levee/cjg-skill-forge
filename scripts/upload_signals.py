@@ -43,20 +43,27 @@ BACKOFF_BASE = 2.0
 # 标准白名单字段（本地 → 云端）
 EVENTS = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis",
           "accept", "reject", "iteration", "edit_capture",
-          "usage_call", "usage_error", "usage_slow", "no_signoff"}   # G1 客观事件 + G4 缺失检测哨兵
+          "usage_call", "usage_error", "usage_slow", "no_signoff",
+          "action_trace"}   # G1 客观事件 + G4 缺失检测哨兵 + P1-4 动作链遥测
 
 # P0 闭环质量新增字段（透传；剥字段降级时排除这些）
 NEW_FIELDS = {"accepted", "revision_rounds", "feedback_tag", "recurrence",
               "attribution", "attribution_note",
-              "metric"}                                 # G1 客观指标（对象，服务端校验后落库 metric_json）
+              "metric",                                       # G1 客观指标（对象，服务端校验后落库 metric_json）
+              "action_name", "action_outcome"}                # P1-4 动作链遥测（白名单方法层标签 + 结果枚举）
 
 
-def _is_unknown_column(err_text):
-    """GAP-2 判定：服务端是否因「未知列」拒绝（迁移尚未跑的竞态窗口）。"""
+def _is_schema_reject(err_text):
+    """GAP-2/兼容性降级判定：服务端是否因「结构未就绪」拒绝——
+
+    - "unknown column"（迁移尚未跑的列竞态窗口）
+    - "白名单外字段"（服务端白名单尚未含新增字段的竞态窗口）
+    任一命中即剥 NEW_FIELDS 重试一次，使新字段上线前后都能优雅降级、不丢基础信号。
+    """
     if not err_text:
         return False
     t = err_text.lower()
-    return "unknown column" in t or ("column" in t and "unknown" in t)
+    return ("unknown column" in t) or ("白名单外字段" in t) or ("未知列" in t)
 
 
 def resolve_ingest_url(skill_dir):
@@ -350,9 +357,9 @@ def process_skill(skill_dir, dry_run=False):
             status, ok, category, returned_anon, err_text = post_signal(url, payload)
             if ok:
                 break
-            # GAP-2：首次遇到 unknown column → 剥 6 新字段重试一次（迁移竞态窗口）
-            if not gap2_stripped and _is_unknown_column(err_text):
-                log(f"[{name}] GAP-2 降级：服务端未知列(迁移未跑?)，剥 {len(NEW_FIELDS)} 个新字段重试 signal_id={cid}")
+            # GAP-2：首次遇到结构未就绪（未知列 / 白名单外字段）→ 剥新字段重试一次（迁移竞态窗口）
+            if not gap2_stripped and _is_schema_reject(err_text):
+                log(f"[{name}] GAP-2 降级：服务端结构未就绪(迁移未跑?)，剥 {len(NEW_FIELDS)} 个新字段重试 signal_id={cid}")
                 for nf in NEW_FIELDS:
                     payload.pop(nf, None)
                 gap2_stripped = True

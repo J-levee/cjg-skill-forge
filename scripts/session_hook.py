@@ -10,6 +10,7 @@
 用法（SKILL.md A.2 会话钩子，均为静默执行、失败不阻塞、不打扰用户）：
   python scripts/session_hook.py begin [--dir <技能目录>]   # 会话开始：检测 + 更新状态
   python scripts/session_hook.py end   [--dir <技能目录>]   # 会话结束：标记已收尾（收尾块之后调用）
+  python scripts/session_hook.py action <name> <outcome> [--dir <技能目录>]   # P1-4 动作链遥测（白名单动作名 + success/fail/partial/skip）
 
 状态文件：<技能目录>/.session_state.json（运行时产物，发布时排除）：
   {"last_start_ts": "...", "last_signoff": false}
@@ -35,6 +36,16 @@ SIGNALS_MD = os.path.join("references", "signals.md")
 EVENTS_ALLOWED = {"helpful", "unhelpful", "confusion", "suggestion", "abandoned", "misdiagnosis",
                   "accept", "reject", "iteration", "edit_capture"}
 LAYERS_ALLOWED = {f"L{i}" for i in range(1, 8)}
+# ---- P1-4 动作链遥测白名单（方法层标签，零 PII；详情见 signals.md §八）----
+ACTION_NAMES_ALLOWED = {
+    # 锻造炉自身动作（产出技能由 forge-signal-kit 注入各自白名单；此处为兜底默认集）
+    "forge_new", "upgrade", "review", "recast", "clarify",
+    "register_skill", "open_cloud_sync", "close_cloud_sync", "turn_off_log",
+    "publish", "joint_test", "self_check", "inject_signal_kit",
+    "run_pipeline", "view_signals", "view_growth", "delete_signals",
+    "download_proposals", "apply_proposal",
+}
+ACTION_OUTCOMES_ALLOWED = {"success", "fail", "partial", "skip"}
 
 
 def _utcnow_iso():
@@ -253,6 +264,43 @@ def cmd_usage(skill_dir, calls, success, errors="", duration=0, note=""):
     return 0 if ok else 1
 
 
+def cmd_action(skill_dir, name, outcome):
+    """写一条动作链遥测信号（action_trace，L0 + action_name/action_outcome）——匿名/方法层/opt-in。
+
+    动作名必须在白名单（防止任意用户文本泄漏 PII）；结果固定枚举。守体验铁律。
+    """
+    author = os.path.basename(skill_dir.rstrip("/\\"))
+    if not os.path.exists(os.path.join(skill_dir, SIGNALS_MD)):
+        print(f"[session] [{author}] 非信号技能，跳过")
+        return 0
+    if not _optin_on(skill_dir):
+        print(f"[session] [{author}] 本地记录关闭，跳过")
+        return 0
+    if name not in ACTION_NAMES_ALLOWED:
+        print(f"[session] 未知动作名: {name}（允许: {sorted(ACTION_NAMES_ALLOWED)}）")
+        return 1
+    if outcome not in ACTION_OUTCOMES_ALLOWED:
+        print(f"[session] 未知结果: {outcome}（允许: {sorted(ACTION_OUTCOMES_ALLOWED)}）")
+        return 1
+    sig = {
+        "ts": _utcnow_iso(),
+        "signal_id": str(uuid.uuid4()),
+        "client_signal_id": str(uuid.uuid4()),
+        "skill_slug": author,
+        "skill_version": _read_skill_version(skill_dir),
+        "method_layer": "L0",
+        "event": "action_trace",
+        "weight": 1,
+        "note": "",
+        "anon_id": _read_anon_id(skill_dir) or "",
+        "action_name": name,
+        "action_outcome": outcome,
+    }
+    ok = _append_signal(skill_dir, sig)
+    print(f"[session] [{author}] 已记录动作链遥测 L0·action_trace({name}={outcome})（{'✓' if ok else '✗ 写入失败'}）")
+    return 0 if ok else 1
+
+
 def cmd_end(skill_dir, event=None):
     """会话结束钩子：写收尾信号（可选 --event）+ 标记已收尾。
     ——Agent 只需一条命令：先写信号（脚本生成标准 JSON），再标记收尾。"""
@@ -293,6 +341,10 @@ def main():
     se = sub.add_parser("end", help="会话结束：写收尾信号+标记收尾")
     se.add_argument("--dir", default=None)
     se.add_argument("--event", default=None, help="格式 L<层>:<事件> 或 L<层>·<事件>，如 L3:helpful / L3·helpful")
+    sa = sub.add_parser("action", help="写一条动作链遥测(action_trace)")
+    sa.add_argument("--dir", default=None)
+    sa.add_argument("name", help="动作名（白名单方法层标签，见 signals.md §八）")
+    sa.add_argument("outcome", help="结果 success/fail/partial/skip")
     args = p.parse_args()
     if not args.cmd:
         p.print_help()
@@ -311,6 +363,8 @@ def main():
                          duration=args.duration, note=args.note)
     if args.cmd == "end":
         return cmd_end(skill_dir, event=args.event)
+    if args.cmd == "action":
+        return cmd_action(skill_dir, args.name, args.outcome)
     return 2
 
 

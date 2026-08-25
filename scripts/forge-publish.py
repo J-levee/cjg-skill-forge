@@ -55,6 +55,9 @@ DEFAULT_PROPOSAL_URL = None  # 部署 cjg-proposal 后由 --proposal-url 注入�
 SKILLHUB_API_HOST = "https://api.skillhub.cn"
 SKILLHUB_CREDENTIALS = Path.home() / ".skillhub" / "credentials.json"
 SKILLHUB_PYTHON = "python"
+# 发布包绝不可包含的运行时/密钥点文件（RC2/B2/#14 根治）。
+# 与 forge-signal-kit.py 的 RUNTIME_POINT_FILES 同源（信号运行时点文件），本列表额外含
+# .deploy（创作者 token 目录，零密钥模型下绝不进包）。两处须保持同步。
 SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
                           ".cloud_optin", ".optin", ".anon_id",
                           ".errored_ids.txt", ".upload_zero_rounds",
@@ -62,7 +65,8 @@ SKILLHUB_EXCLUDE_FILES = [".gitignore", ".cloud_token", ".cloud_config",
                           ".skill_edit_baseline.json", ".capture.lock",
                           ".session_state.json", ".session_hook.lock",
                           ".apply-snapshots",
-                          "cloud-enhancement"]
+                          "cloud-enhancement",
+                          ".deploy"]
 EMAIL_FIELD_HINTS = ("email", "mail", "_email", "contact_email")
 _GENERATED = "__GENERATED__"
 
@@ -223,6 +227,47 @@ def restore_files(skill_dir: Path, backups: dict):
             backup_path.unlink(missing_ok=True)
 
 
+def _skillhub_ignore_match(skill_dir: Path, rel: str) -> bool:
+    """解析 <skill_dir>/.skillhubignore（类 .gitignore，逐行相对路径/目录名），
+    命中返回 True（应排除）。文件不存在/格式错 → 不命中。"""
+    p = skill_dir / ".skillhubignore"
+    if not p.exists():
+        return False
+    try:
+        for line in p.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            pat = line.rstrip("/")
+            if rel == pat or rel.startswith(pat + "/") or os.path.basename(rel) == pat:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def verify_pack_clean(skill_dir: Path) -> list:
+    """打包干净验证（P0-1 硬闸门）：模拟平台 CLI 的打包方式（os.walk + 排除规则），
+    返回「本会被打进包」的运行时点文件/目录清单（空=干净）。
+    与 SKILLHUB_EXCLUDE_FILES + .skillhubignore 同源规则，确保 backup_and_remove
+    之后目录里确实不再残留任何禁包文件。返回非空即阻断发布。"""
+    leaked = []
+    for root, dirs, files in os.walk(skill_dir):
+        rel_root = Path(root).relative_to(skill_dir)
+        # 目录级排除（如 .apply-snapshots / cloud-enhancement / .deploy）
+        for d in list(dirs):
+            rel_d = str(rel_root / d).replace("\\", "/")
+            if d in SKILLHUB_EXCLUDE_FILES or _skillhub_ignore_match(skill_dir, rel_d):
+                leaked.append(rel_d + "/")
+                dirs.remove(d)
+        for fn in files:
+            full = Path(root) / fn
+            rel = str(rel_root / fn).replace("\\", "/")
+            if fn in SKILLHUB_EXCLUDE_FILES or _skillhub_ignore_match(skill_dir, rel):
+                leaked.append(rel)
+    return leaked
+
+
 def get_skillhub_token() -> Optional[str]:
     try:
         creds = json.loads(SKILLHUB_CREDENTIALS.read_text(encoding="utf-8"))
@@ -349,6 +394,12 @@ def publish_skillhub(skill_dir: Path, slug: str, version: str,
     try:
         backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
         backups.update(generic_sanitize_config(skill_dir))
+        # P0-1 硬闸门：backup_and_remove 之后目录必须无任何禁包运行时点文件/目录
+        leaked = verify_pack_clean(skill_dir)
+        if leaked:
+            print(f"    ✗ 打包干净校验失败（以下文件会泄漏进包，阻断发布）: {leaked}")
+            print(f"       这些文件本应被 backup_and_remove 移走——请检查 SKILLHUB_EXCLUDE_FILES 与技能目录。")
+            return False
         cmd = [
             SKILLHUB_PYTHON, str(_find_skillhub_cli()), "publish", str(skill_dir),
             "--version", version, "--changelog", changelog,
@@ -396,6 +447,13 @@ def publish_clawhub(skill_dir: Path, slug: str, version: str,
     ensure_frontmatter(skill_dir, slug, "")
     backups = generic_sanitize_config(skill_dir)
     backups.update(backup_and_remove(skill_dir, SKILLHUB_EXCLUDE_FILES))
+    # P0-1 硬闸门：backup_and_remove 之后目录必须无任何禁包运行时点文件/目录
+    leaked = verify_pack_clean(skill_dir)
+    if leaked:
+        print(f"    ✗ 打包干净校验失败（以下文件会泄漏进包，阻断发布）: {leaked}")
+        print(f"       这些文件本应被 backup_and_remove 移走——请检查 SKILLHUB_EXCLUDE_FILES 与技能目录。")
+        restore_files(skill_dir, backups)
+        return False
     # ClawHub CLI v0.23.0+ 兼容：若技能目录含 .claude-plugin/plugin.json，会被误识别为
     # plugin 而强制走 `package publish`（需 openclaw.plugin.json），导致发布失败。
     # 这里临时挪开该文件，走 skill 发布路径（读 SKILL.md），发布后还原。
@@ -691,7 +749,15 @@ def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) 
         print("    ✗ --require-register 已开启但技能未注册，阻断发布")
         ok = False
 
-    print(f"\n{'='*60}")
+    # ---- 打包干净预检（P0-1，警告不阻断：发布时 backup_and_remove 自动移走）----
+    leaked = verify_pack_clean(skill_dir)
+    if leaked:
+        print(f"\n  打包干净预检（P0-1）：以下运行时点文件/目录本会被打进包，"
+              f"发布时 backup_and_remove 会自动移走（--check 不阻断）:")
+        for lf in leaked:
+            print(f"    - {lf}")
+    else:
+        print(f"\n  打包干净预检（P0-1）：✓ 无运行时点文件残留（发布即干净）")
     print(f"{'✅ 校验通过，可发布' if ok else '⚠️ 校验有缺失，请先补全 frontmatter'}")
     print(f"{'='*60}\n")
     return 0 if ok else 1

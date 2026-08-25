@@ -53,6 +53,8 @@
 | `recurrence` | **同反馈复发标记** | `1/0/true/false`，同一反馈反复出现时计 |
 | `attribution` | **归因（P0 闭环）** | `agent`/`skill`/`harness`/`unknown`（harness=运行时/工具可用性；unknown 交 P1 人审） |
 | `attribution_note` | **归因备注** | ≤255 位字符串，服务端强制 `pii_scrub` 脱敏 |
+| `action_name` | **动作名（P1-4 动作链遥测）** | 小写 snake_case 白名单标签（≤48 字符），见 §八；零 PII |
+| `action_outcome` | **动作结果（P1-4）** | `success` / `fail` / `partial` / `skip` |
 
 ### L1–L7 层码（锻造炉语义）
 
@@ -66,7 +68,9 @@
 | `L6` | 内嵌清晰化（Embedded clarity） | S7 四维（D1–D4）+ 保真红线 |
 | `L7` | 发布闸门（Publish gates） | S8 可推广 + 纪律13/17 安全审计 + last-mile 闭环 |
 
-### event 枚举（10 类：6 推断类 + 4 闭环类）
+### event 枚举（11 类：6 推断类 + 4 闭环类 + 1 行为遥测类）
+
+> 第 11 类 `action_trace` 为 P1-4 新增的**行为层遥测**（与语义事件「为什么好用」、客观事件「用多少」正交互补），详见 §二·八。
 
 **6 类基础事件（由 Tier 0 对话信号推断）：**
 
@@ -142,6 +146,22 @@
 - **落库**：`signals.metric_json`（TEXT 存 JSON，服务端校验后写入）；旧数据为 NULL 不受影响。
 - **客户端产生**（会话结束 `[使用]` 行）：`event=usage_call` + metric 对象 → `upload_signals.py` 透传 → 服务端校验落库。
 - **服务网关产生**（插件式，SmartLib usage_log 为范例）：网关每日聚合 → 同步（剥 email/user_id，只留聚合指标）→ 同上校验落库。
+
+### 二·八 动作链遥测（P1-4 · action_trace）
+
+> 回答「用户触发了哪个关键动作、成没成」——**行为层遥测**，与语义事件（为什么好用）/ 客观事件（用多少）正交互补。守体验铁律：匿名 + 方法层 + opt-in + 零 PII。
+
+- **事件**：`action_trace`（行为层，method_layer 固定 `L0`）。
+- **字段**：`action_name`（白名单，见 §八）+ `action_outcome`（`success` / `fail` / `partial` / `skip`）。
+- **触发**：Agent 在用户完成 / 尝试一个白名单动作后调用 `scripts/session_hook.py action <name> <outcome>`（本地记录开时写入，关时跳过）。
+- **零 PII**：`action_name` 只允许 §八 白名单内的方法层标签，**绝不允许任意用户自由文本**——从源头杜绝 PII 泄漏（服务端 + 客户端双重校验）。
+- **云端**：与 `usage_call` 同通道（`.cloud_optin` 控上传）；Body 白名单见 §七。
+
+```json
+{"ts":"...","signal_id":"<uuid>","client_signal_id":"<uuid>","skill_slug":"cjg-skill-forge",
+ "skill_version":"<ver>","method_layer":"L0","event":"action_trace","weight":1,
+ "anon_id":"<本机uuid>","action_name":"publish","action_outcome":"success"}
+```
 
 ## 三、两层授权模型（本地安装即开 / 云端上传默认关需显式开启）
 
@@ -235,11 +255,37 @@ printf '%s\n' "$(python -c "import json,uuid,datetime; print(json.dumps({'ts':da
 
 - **端点**：`cloud_config.json` 的 `ingest_url` + `/ingest/anon`（随包分发，仅公网 URL、零密钥；**代码零硬编码**，端点完全来自外部配置，缺失则跳过云端上传）。
 - **鉴权**：**无**（匿名端点免鉴权）。首次上报可不带 `anon_id`，由服务端 HMAC 签发并返回；后续携带复用同一限流身份。
-- **Body 白名单**：`{slug, method_layer, event, weight, note, anon_id, mode, skill_version, client_signal_id, accepted, revision_rounds, feedback_tag, recurrence, attribution, attribution_note}`（P0 闭环 6 字段全部可选，缺失落 NULL）。
+- **Body 白名单**：`{slug, method_layer, event, weight, note, anon_id, mode, skill_version, client_signal_id, accepted, revision_rounds, feedback_tag, recurrence, attribution, attribution_note, action_name, action_outcome}`（P0 闭环 6 字段 + P1-4 动作链 2 字段全部可选，缺失落 NULL）。
 - **method_layer**：须为 **L1–L7 层码**。
-- **event 枚举**：`confusion` / `helpful` / `unhelpful` / `suggestion` / `misdiagnosis` / `abandoned` / `accept` / `reject` / `iteration` / `edit_capture`。
+- **event 枚举**：`confusion` / `helpful` / `unhelpful` / `suggestion` / `misdiagnosis` / `abandoned` / `accept` / `reject` / `iteration` / `edit_capture` / `action_trace`。
 - **weight 范围**：1–5 整数。
 - **限流**：per-anon_id 100 次/小时 + 全局护栏 10000 次/小时；超限返回 429（脚本收到 429 立即停本轮，下轮续）。
 - **零 PII 校验**：云端 `signal_validate` 强制白名单 + note 脱敏扫描，超出字段直接拒绝。
+
+## 八、动作名白名单（P1-4 · action_name 取值）
+
+> `action_name` 只接受下列方法层标签（snake_case，零 PII）；任意不在表的名称服务端 + 客户端双重拒绝。产出技能由 `forge-signal-kit.py` 注入各自专属白名单（覆盖本表）。
+
+| action_name | 含义 |
+|-------------|------|
+| `forge_new` | 新建技能（模式 A 进入） |
+| `upgrade` | 升级既有技能 |
+| `review` | 审视 / 审计技能（模式 B） |
+| `recast` | 重铸整合技能库（模式 C） |
+| `clarify` | 内嵌清晰化（模式 D / S7） |
+| `register_skill` | 注册技能到藏经阁（forge-register） |
+| `open_cloud_sync` | 开启云同步（开启云同步） |
+| `close_cloud_sync` | 关闭云同步（别传了） |
+| `turn_off_log` | 关闭本地记录（别记了） |
+| `publish` | 四平台发布（forge-publish） |
+| `joint_test` | 三侧三方联合测试（S9） |
+| `self_check` | 全量自测（selfcheck） |
+| `inject_signal_kit` | 注入信号套件（S0） |
+| `run_pipeline` | 工作流编排（forge_pipeline） |
+| `view_signals` | 查看我的信号 |
+| `view_growth` | 我的技能成长 |
+| `delete_signals` | 删除我的信号 |
+| `download_proposals` | 同步 / 查看提案 |
+| `apply_proposal` | 应用提案 |
 
 > 本文件与扫地僧 `references/signals.md` 同源（v0.4 双模态）；差异仅在 L1–L7 层码语义（锻造炉按锻造能力分层）与不含 `coverage_gap`（锻造炉自身缺口上报走 `event=suggestion` + `note`）。

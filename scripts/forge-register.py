@@ -143,7 +143,7 @@ def cmd_register(args, skill_dir: Path, slug: str, email: str, register_url: str
     if not r.get("ok"):
         print(f"✗ 注册失败: {r.get('error')}")
         return 1
-    print(f"✓ 已向 {email} 发送验证码（10 分钟内有效）")
+    print(f"✓ 已向 {email} 发送验证码（20 分钟内有效）")
     print(f"  查收后运行:  python forge-register.py verify <验证码>")
     return 0
 
