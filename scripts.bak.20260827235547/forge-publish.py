@@ -582,26 +582,20 @@ def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) 
         return 1
 
     fm = _read_frontmatter(skill_dir / "SKILL.md")
-    name = fm.get("name")
     slug = fm.get("slug") or slug_hint
-    # N1-b 策略 A：slug 缺失但 name 存在 → 自动派生 slug = name（不再硬失败）
-    if not slug and name:
-        slug = name
-        print(f"  ℹ frontmatter 缺 slug，按策略 A 自动派生 slug = name（{name}）")
     display = fm.get("displayName") or "(无)"
-    version = fm.get("version")
-    # N1-b：version 缺失/非法 → 默认 0.0.0 提示（不再硬失败，避免合法技能被卡）
-    if not version or not re.match(r"^\d+(\.\d+){0,2}$", str(version)):
-        print(f"  ℹ frontmatter 缺合法 version，按默认 0.0.0 处理（建议显式声明 version）")
-        version = "0.0.0"
+    version = fm.get("version") or "(无)"
 
     print(f"  slug        : {slug}")
     print(f"  displayName : {display}")
     print(f"  version     : {version}")
 
     ok = True
-    if not slug and not name:
-        print("  ✗ frontmatter 既缺 slug 也缺 name（无法派生发布标识，阻断发布）")
+    if not slug:
+        print("  ✗ frontmatter 缺 slug（将无法通过 ClawHub --slug）")
+        ok = False
+    if version == "(无)" or not re.match(r"^\d+(\.\d+){0,2}$", str(version)):
+        print("  ✗ frontmatter 缺合法 version")
         ok = False
 
     print(f"\n  双模态校验 (单版本双模态模型):")
@@ -770,29 +764,11 @@ def check_only(skill_dir: Path, slug_hint: str, require_register: bool = False) 
 
 
 # ============================================================
-# 路径归一（N3：根治 git-bash '/c/...' 被 Windows Python 误解析）
-# ============================================================
-def _norm_path(p):
-    """归一用户输入路径：根治 git-bash '/c/...' 被 Windows Python abspath 误解析为 'C:\\c\\...'。
-    /c/ → C:/ ；expanduser ；去尾斜杠（保留盘符根）；None 原样返回。"""
-    if p is None:
-        return None
-    s = os.path.expanduser(str(p).strip())
-    m = re.match(r"^/([a-zA-Z])/(.*)$", s)
-    if m:
-        s = m.group(1).upper() + ":/" + m.group(2)
-    s = s.rstrip("/\\")
-    if len(s) == 2 and s[1] == ":":
-        s += "/"
-    return os.path.abspath(s)
-
-
-# ============================================================
 # 主流程
 # ============================================================
 def resolve_skill_dir(args) -> Optional[Path]:
     if args.path:
-        p = Path(_norm_path(args.path))
+        p = Path(args.path).expanduser().resolve()
         return p if p.exists() else None
     if args.skill:
         p = SKILLS_BASE / args.skill

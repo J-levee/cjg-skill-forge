@@ -250,60 +250,6 @@ def t5_local_signal_chain():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
-def t6_e2e_forge():
-    """R4 端到端锻造闭环回归（防回归：inject + --check + end 钩子信号闭环）。
-    用临时 dummy 技能跑完整 S0→S6 链路，断言：
-      S0 inject 成功 → S6 forge-publish --check 全绿 → end 钩子写入 ≥1 条信号且归属正确。
-    全部在临时目录进行，零污染真实技能。"""
-    import json as _json
-    section("⑥ R4 端到端锻造闭环（dummy：S0 inject → S6 --check 过 → end 钩子 ≥1 信号）")
-    tmp = tempfile.mkdtemp(prefix="sf-e2e-")
-    try:
-        slug = "dummy-e2e-skill"
-        skill = os.path.join(tmp, slug)
-        os.makedirs(os.path.join(skill, "references"))
-        # 最小 SKILL.md：仅 frontmatter + 基础正文，不含 A.0/A.1/A.2（让 inject 注入）
-        open(os.path.join(skill, "SKILL.md"), "w", encoding="utf-8").write(
-            "---\n"
-            "name: dummy-e2e-skill\nslug: dummy-e2e-skill\n"
-            "displayName: 端到端测试技能\ndescription: 'Use when R4 selfcheck end-to-end'\n"
-            "agent_created: true\nversion: 0.1.0\n---\n\n"
-            "# Dummy E2E Skill\n\n## 何时使用\n| 场景 | 触发 |\n|------|------|\n| 测试 | e2e |\n"
-        )
-        # S0：注入信号套件（自动补齐 A.0/A.1/A.2/A.3 + signals.md + 套件 + coverage.md + 状态文件）
-        r = run([PY, os.path.join(HERE, "forge-signal-kit.py"), "inject", skill])
-        check("S0 信号套件注入成功（inject 返回 0 + 闭环就绪）",
-              r.returncode == 0 and "闭环就绪" in r.stdout, r.stdout[-300:] + r.stderr[-200:])
-        # S6：发布前校验必须全绿（锻造产物闭环完整 + frontmatter 齐全）
-        r = run([PY, os.path.join(HERE, "forge-publish.py"), "--check", "--path", skill])
-        check("S6 发布前校验 --check 通过（锻造产物闭环完整）",
-              r.returncode == 0 and "校验通过" in r.stdout, r.stdout[-300:] + r.stderr[-200:])
-        # end 钩子：会话结束写收尾信号（闭环最后一环）
-        r = run([PY, os.path.join(HERE, "session_hook.py"), "end",
-                 "--event", "L3:suggestion", "--dir", skill])
-        check("end 钩子执行不崩溃",
-              r.returncode == 0 and "Traceback" not in (r.stderr or ""), (r.stderr or r.stdout)[-200:])
-        # 信号落盘 + 归属正确
-        log = os.path.join(skill, "signals-log.jsonl")
-        rows = []
-        if os.path.exists(log):
-            for ln in open(log, encoding="utf-8").read().splitlines():
-                ln = ln.strip()
-                if not ln:
-                    continue
-                try:
-                    rows.append(_json.loads(ln))
-                except Exception:
-                    pass
-        check("end 钩子写入 ≥1 条信号", len(rows) >= 1, f"lines={len(rows)}")
-        ok_slug = any(s.get("skill_slug") == slug for s in rows)
-        check("信号 skill_slug 正确（归属到本技能）", ok_slug,
-              f"expect={slug} got={[s.get('skill_slug') for s in rows]}")
-    finally:
-        import shutil
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
 def main():
     print(f"技能锻造炉 · 全量自测（skill-forge · {SKILL_DIR}）", flush=True)
     safe(t1_structure)
@@ -311,7 +257,6 @@ def main():
     safe(t3_script_entries)
     safe(t4_key_files)
     safe(t5_local_signal_chain)
-    safe(t6_e2e_forge)
     passed = sum(1 for r in RESULTS if r)
     print(f"\nSelfcheck: {passed}/{len(RESULTS)} 通过", flush=True)
     sys.exit(0 if passed == len(RESULTS) else 2)

@@ -2,7 +2,7 @@
 slug: cjg-skill-forge
 name: cjg-skill-forge
 displayName: 技能锻造炉——打造/重铸一个牛逼的技能，并且一直牛逼
-version: 3.1.0
+version: 3.1.2
 description: |
   技能锻造炉 / Skill Forge —— 元技能：**创建、升级、重铸、审计**一个「全球最牛」的 WorkBuddy / AI 技能，并让它越用越强。**锻造**模式：从零打造新技能（带版本反馈环、真实素材覆盖审计、外部标杆对比、自我迭代、生产签批、真机验证）；**审视**模式：10 维加权评分尺，给任何技能（含它自己）打分，判断够不够好；**重铸**模式：审计并整合本机重叠技能、合并同类、整理技能库，给出重铸计划与推荐基座；还能让技能更 AI 易读（清晰化）。当你想"做到最牛"、创建一个 XX 技能、升级我的技能、review this skill、整理技能、合并同类、skill 怎么改、SKILL.md 怎么写、怎么制作一个 AI 技能时，用它。
 
@@ -28,7 +28,7 @@ agent_created: true
 
 ## 命令执行约定（所有 scripts 命令先读这条）
 
-所有 `scripts/*.py` 从技能根目录运行（先 `SKILL_DIR=$(ls -d ~/.workbuddy/skills/*/cjg-skill-forge 2>/dev/null|head -1) && cd "$SKILL_DIR"`）。`session_hook.py` 支持不带 `--dir` 自动推导。校验 / 打包脚本在 skill-creator 插件：`VALIDATOR=$(find ~/.workbuddy/plugins -name quick_validate.py|head -1) && python "$VALIDATOR" <技能目录>`。
+所有 `scripts/*.py` 从技能根目录运行（先 `SKILL_DIR=$(find ~/.workbuddy/skills -maxdepth 2 -type d \( -name skill-forge -o -name cjg-skill-forge \) 2>/dev/null | head -1) && cd "$SKILL_DIR"`；说明：本地目录名可能是 `skill-forge`（WorkBuddy 安装）或 `cjg-skill-forge`（GitHub 克隆），且可能位于 `skills/` 下一级或命名空间子目录——用 find 兜底定位，勿用 `*/cjg-skill-forge` 这类假定发布 slug 即目录名的 glob。「线上发布 slug」始终是 `cjg-skill-forge`，与本地目录名是两回事）。`session_hook.py` 支持不带 `--dir` 自动推导。校验 / 打包脚本在 skill-creator 插件：`VALIDATOR=$(find ~/.workbuddy/plugins -name quick_validate.py|head -1) && python "$VALIDATOR" <技能目录>`。
 
 ---
 
@@ -56,8 +56,8 @@ agent_created: true
 
 | 模式 | 进入 | 核心 | 引用 |
 |---|---|---|---|
-| **A 锻造** | 新建 / 大升级 | 锻造循环 → **A.5 真机 S0–S8** | `skill-types.md` `forge-modes.md` `contest-hard-forge.md` |
-| **B 审视** | 审计 | 评分尺 → 10 维 → 反模式 → 报告 | `skill-review-rubric.md` `anti-patterns.md` |
+| **A 锻造** | 新建 / 大升级 | 锻造循环 → **A.5 真机 S0–S8** | 深度锻造方法论已上云：注册藏经阁 + opt-in 由 `cjg-report` 免费增强提供；离线降级用本地 21 内核 |
+| **B 审视** | 审计 | 评分尺 → 10 维 → 反模式 → 报告（`skill-report.py` 免费出雷达） | `skill-review-rubric.md`（D1–D10 留本地）｜ 反模式/深度方法论注册藏经阁免费解锁 |
 | **C 重铸** | 重叠 | `recast_scan.py` 只读 → 确认合并 | `skill-consolidation.md` |
 | **D 清晰化** | S7 / 显式 | D1–D4 + 保真闸 | `clarity-coverage.md` `clarity-fidelity-template.md` |
 
@@ -145,11 +145,13 @@ agent_created: true
 
 ## 资源索引（按需加载 · 锚点）
 
-- **方法论**：`references/skill-writing-guide.md` · `references/forge-modes.md` · `references/forge-disciplines.md` · `references/skill-review-rubric.md` · `references/skill-types.md` · `references/anti-patterns.md` · `references/trigger-keywords.md`
-- **质量纪律**：`references/coverage-audit.md` · `references/simulation-testing.md` · `references/feedback-loop.md` · `references/churn-reflector.md` · `references/project-governance.md` · `references/persona-design.md` · `references/skill-consolidation.md`
+- **方法论**：`references/skill-writing-guide.md` · `references/skill-review-rubric.md`（D1–D10 留本地）· `references/trigger-keywords.md` ｜ 深度锻造方法论（forge-modes / forge-disciplines / skill-types / anti-patterns 等 9 篇）已上云：注册藏经阁 + opt-in 由 `cjg-report` 免费增强提供，离线降级用本地内核。
+- **质量纪律**：`references/coverage-audit.md` · `references/simulation-testing.md` · `references/project-governance.md` · `references/skill-consolidation.md` ｜ 反馈环 / 流失反思 / 人设设计（feedback-loop / churn-reflector / persona-design）已上云，注册藏经阁免费解锁增强。
 - **清晰化 / 分发**：`references/clarity-coverage.md` · `references/clarity-fidelity-template.md` · `references/promotability-gate.md` · `references/yunding-security-audit.md` · `references/security-audit.md` · `references/discovery.md`/`references/intro.md` · `references/coverage-seeding.md`
 - **执行参考**：`references/pipeline.md` · `scripts/forge_pipeline.py` · `scripts/forge_runbook.py`(→`scripts/run_verified.py`) · `scripts/joint_test.py` · `scripts/selfcheck.py` · `scripts/forge-describe.py`
-- **模板**：`references/contest-hard-forge.md` · `references/clarity-fidelity-template.md` · `references/cloud-config-schema.md` · `references/quality-iteration-playbook.md`
+- **模板**：`references/clarity-fidelity-template.md` · `references/cloud-config-schema.md` ｜ 硬核锻造模板（contest-hard-forge / quality-iteration-playbook 等）已上云，注册藏经阁免费解锁。
+- **免费评测报告**：`scripts/skill-report.py <技能目录>` 离线出 D1–D10 雷达图；`--cloud --token <藏经阁令牌>` 免费解锁云端增强诊断（注册藏经阁即通过邮箱验证即解锁，**报告功能永远免费**）。
+- **人设记忆**：`references/acquaintance.md`（persona 技能的跨会话用户画像卡；persona 方法论已上云，本卡常驻本地）
 
 ## 非职责边界
 

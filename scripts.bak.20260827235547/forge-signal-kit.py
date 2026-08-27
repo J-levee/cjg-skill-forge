@@ -28,22 +28,6 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC_SKILL = os.path.dirname(HERE)  # 本技能（锻造炉）根目录
 
-
-def _norm_path(p):
-    """归一用户输入路径：根治 git-bash '/c/...' 被 Windows Python abspath 误解析为 'C:\\c\\...'。
-    规则：/c/ → C:/ ；/d/ → D:/ ；expanduser ；去尾斜杠（保留盘符根 C:/）；返回绝对路径；
-    None 原样返回。内部常量（HERE/__file__/固定 secrets 路径）不调用本函数。"""
-    if p is None:
-        return None
-    s = os.path.expanduser(str(p).strip())
-    m = re.match(r"^/([a-zA-Z])/(.*)$", s)
-    if m:
-        s = m.group(1).upper() + ":/" + m.group(2)
-    s = s.rstrip("/\\")
-    if len(s) == 2 and s[1] == ":":  # 形如 C: 补根
-        s += "/"
-    return os.path.abspath(s)
-
 # 信号套件清单：相对路径 -> 源文件位置
 KIT = [
     ("scripts/upload_signals.py", "scripts/upload_signals.py"),
@@ -155,7 +139,6 @@ def _render_signals_md(skill_dir, force=False):
     # 1) 示例值替换：锻造炉 slug/version → 目标技能（signals.md 内所有示例与 one-liner）
     text = text.replace("cjg-skill-forge", slug)
     text = re.sub(r"2\.9\.\d+", version, text)
-    text = text.replace("<ver>", version)  # N5：显式版本占位符（与 2.9.x 正则互补，避免未来版本号格式变化漏替换）
     # 2) 头部注入适配说明（说明本文件已按目标技能渲染）
     adapter = (f"> 本文件由「技能锻造炉」为 **{slug} v{version}** 定制注入（{__file__.split(chr(92))[-1]}）：\n"
                f"> 全文示例的 skill_slug / skill_version 已按本技能替换；层码 L1–L7 语义可按本技能的实际能力层调整。\n\n")
@@ -269,7 +252,7 @@ def _pack_clean_check(skill_dir):
     """打包干净检查（P1-1 ⑦ / RC2 根治）：用 RUNTIME_POINT_FILES 排除逻辑构建一个
     "干净 zip"，再解析确认其中不含任何运行时点文件。自包含（不依赖锻造炉本体 / zip CLI）。
     返回 (clean: bool, leaked: [文件名])。"""
-    skill_dir = _norm_path(skill_dir)
+    skill_dir = os.path.abspath(skill_dir)
     leaked = []
     try:
         tmp = os.path.join(tempfile.gettempdir(), f"_forgepackcheck_{os.path.basename(skill_dir)}.zip")
@@ -403,39 +386,6 @@ def _cloud_config_reachable(skill_dir):
         return ("warn", "网络不可达（离线/开发环境，非阻断）")
 
 
-def _loop_runtime_state(skill_dir):
-    """闭环运转态（B4/N6：区分「就绪」与「已运转」）。
-    - active：signals-log.jsonl 有 ≥1 条信号（闭环真实跑起来）
-    - ready ：结构完整但尚无信号（新发布技能本就如此，非阻断）
-    返回 (state, detail)。结构断点由 _check_loop_integrity 的 problems 判定，本函数只管运转态。"""
-    log_p = os.path.join(skill_dir, "signals-log.jsonl")
-    has = False
-    if os.path.exists(log_p):
-        try:
-            with open(log_p, encoding="utf-8") as lf:
-                for line in lf:
-                    if line.strip():
-                        has = True
-                        break
-        except Exception:
-            pass
-    dep = os.path.join(skill_dir, ".deploy", "cloud_open.json")
-    reg = False
-    if os.path.exists(dep):
-        try:
-            r = json.loads(open(dep, encoding="utf-8").read())
-            reg = bool(r.get("slug") and (r.get("token") or r.get("signal_token")))
-        except Exception:
-            pass
-    if has and reg:
-        return "active", "有信号 + 已注册藏经阁（跨用户闭环已运转）"
-    if has and not reg:
-        return "active", "有本地信号但尚未注册藏经阁（无跨用户归因）"
-    if reg:
-        return "ready", "已注册藏经阁，但 signals-log.jsonl 暂无信号"
-    return "ready", "结构完整但尚未注册藏经阁、且无信号（就绪未运转）"
-
-
 def _check_loop_integrity(skill_dir):
     """闭环完整性校验（端到端 10 项，P1-1 / RC3 根治）。返回 (ok, problems[])。
     不是"文件在不在"的提示词式检查，而是可执行的语义闭环验证。"""
@@ -451,7 +401,7 @@ def _check_loop_integrity(skill_dir):
     sig_p = os.path.join(skill_dir, "references", "signals.md")
     if os.path.exists(sig_p):
         sig = open(sig_p, encoding="utf-8").read()
-        refs = sorted(set(re.findall(r"scripts/([A-Za-z0-9_-]+\.py)", sig)))
+        refs = sorted(set(re.findall(r"scripts/([a-z_]+\.py)", sig)))
         for ref in refs:
             if not os.path.exists(os.path.join(skill_dir, "scripts", ref)):
                 problems.append(f"② signals.md 引用不存在脚本: scripts/{ref}")
@@ -493,17 +443,11 @@ def _check_loop_integrity(skill_dir):
         problems.append(f"⑩ {m}")
     elif rc == "warn":
         warnings.append(f"⑩ {m}")
-    # ⑪ 闭环运转态（B4/N6：区分「就绪」与「已运转」，警告非阻断）
-    st, sdetail = _loop_runtime_state(skill_dir)
-    if st == "active":
-        warnings.append(f"⑪ 闭环已运转 ✓：{sdetail}")
-    else:
-        warnings.append(f"⑪ 闭环就绪未运转 ⚠：{sdetail}")
     return (not problems), problems, warnings
 
 
 def inject(skill_dir, force=False):
-    skill_dir = _norm_path(skill_dir)
+    skill_dir = os.path.abspath(skill_dir)
     if not os.path.isdir(skill_dir) or not os.path.exists(os.path.join(skill_dir, "SKILL.md")):
         print(f"✗ 目标不是技能目录（缺 SKILL.md）: {skill_dir}")
         return False
@@ -559,8 +503,6 @@ def inject(skill_dir, force=False):
     ok, problems, warnings = _check_loop_integrity(skill_dir)
     for w in warnings:
         print(f"  ⚠ {w}")
-    state, detail = _loop_runtime_state(skill_dir)
-    print(f"  闭环运转态: {'✓ ' + detail if state == 'active' else '⚠ ' + detail}（注入即就绪，需真实使用才产生信号）")
     if not ok:
         print(f"✗ 注入后闭环完整性未通过: {problems}")
         return False
@@ -574,15 +516,10 @@ def inject(skill_dir, force=False):
 
 
 def check_only(skill_dir):
-    skill_dir = _norm_path(skill_dir)
+    skill_dir = os.path.abspath(skill_dir)
     ok, problems, warnings = _check_loop_integrity(skill_dir)
     for w in warnings:
         print(f"  ⚠ {w}")
-    state, detail = _loop_runtime_state(skill_dir)
-    if state == "active":
-        print(f"  ✓ 闭环运转态: {detail}")
-    else:
-        print(f"  ⚠ 闭环运转态: {detail}（结构完整即通过，运转态非阻断）")
     if not ok:
         print(f"✗ 闭环完整性未通过（{len(problems)} 项）:")
         for p in problems:

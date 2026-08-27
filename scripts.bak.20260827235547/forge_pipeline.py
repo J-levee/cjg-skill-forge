@@ -11,27 +11,11 @@ S0/S2/S3/S4/S7/S8 走产物存在性判定，S5 走风险分档签批判定。�
 """
 import argparse
 import os
-import re
 import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.join(HERE)  # 本脚本与同类脚本同目录
-
-
-def _norm_path(p):
-    """归一用户输入路径：根治 git-bash '/c/...' 被 Windows Python abspath 误解析为 'C:\\c\\...'。
-    /c/ → C:/ ；expanduser ；去尾斜杠（保留盘符根）；None 原样返回。"""
-    if p is None:
-        return None
-    s = os.path.expanduser(str(p).strip())
-    m = re.match(r"^/([a-zA-Z])/(.*)$", s)
-    if m:
-        s = m.group(1).upper() + ":/" + m.group(2)
-    s = s.rstrip("/\\")
-    if len(s) == 2 and s[1] == ":":
-        s += "/"
-    return os.path.abspath(s)
 
 STAGES = ["S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"]
 STAGE_TITLE = {
@@ -50,38 +34,10 @@ STAGE_TITLE = {
 
 def resolve_skill_dir(args):
     if args.path:
-        p = _norm_path(args.path)
+        p = os.path.abspath(os.path.expanduser(args.path))
         return p if os.path.isdir(p) else None
     cwd = os.getcwd()
     return cwd if os.path.exists(os.path.join(cwd, "SKILL.md")) else None
-
-
-def _parse_frontmatter(md_path):
-    """极简 YAML frontmatter 解析：取首个 --- 与第二个 --- 之间的 key: value。
-    仅解析顶层标量（满足 S0 闸门对 slug/displayName/name/version 的需求），
-    不依赖 PyYAML，避免引入新依赖。失败返回 {}。"""
-    try:
-        text = open(md_path, encoding="utf-8").read()
-    except Exception:  # noqa
-        return {}
-    if not text.startswith("---"):
-        return {}
-    parts = text.split("---", 2)
-    if len(parts) < 3:
-        return {}
-    block = parts[1]
-    fm = {}
-    for line in block.splitlines():
-        line = line.rstrip()
-        if not line or line.lstrip().startswith("#"):
-            continue
-        if ":" not in line:
-            continue
-        k, v = line.split(":", 1)
-        k = k.strip()
-        v = v.strip().strip('"').strip("'")
-        fm[k] = v
-    return fm
 
 
 def _run(cmd, cwd=None):
@@ -104,17 +60,6 @@ def check_S0(sd):
             miss.append(h)
     if miss:
         return False, f"SKILL.md 缺信号段: {miss}"
-    # N1-a: Frontmatter 必须显式声明 slug / displayName（且 slug == name）
-    fm = _parse_frontmatter(md)
-    if not fm.get("slug"):
-        return False, "SKILL.md frontmatter 缺 slug（S0 须显式声明 slug = name）"
-    if not fm.get("displayName"):
-        return False, "SKILL.md frontmatter 缺 displayName（用户可见展示名）"
-    if fm.get("name") and fm.get("slug") and fm["name"] != fm["slug"]:
-        return False, f"slug 与 name 不一致（name={fm['name']} slug={fm['slug']}）"
-    # #3: 云进化引导段（第 0 步）必须存在，否则创作者不知道注册藏经阁可免费出报告
-    if "云进化引导" not in text or "第 0 步" not in text:
-        return False, "SKILL.md 缺「云进化引导 / 第 0 步」段（#3 锚点）"
     if not os.path.exists(os.path.join(sd, "references", "coverage.md")):
         return False, "缺 references/coverage.md（S0 应自动播种）"
     # KIT 套件存在性

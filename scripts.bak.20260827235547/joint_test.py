@@ -202,26 +202,6 @@ def stage_c_cloud():
                           ("proposal", "proposal_url"), ("aggregate", "aggregate_url")):
             if key in cc:
                 check(f"[用户] 端点配置 {name}", bool(cc[key].startswith("https://")), cc[key])
-        # 新增端点：cjg-report（9 文件上云增强报告）。部署前 report_url 可能缺失 → 仅配置探测；
-        # 部署后须为 https 且 --with-cloud 下 health 绿（9 文件已加载）。
-        if "report_url" in cc:
-            check("[用户] 端点配置 report", bool(cc["report_url"].startswith("https://")), cc["report_url"])
-            if WITH_CLOUD:
-                import urllib.request
-                import urllib.error
-                try:
-                    req = urllib.request.Request(
-                        cc["report_url"] + "/report",
-                        data=json.dumps({"action": "health"}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"}, method="POST")
-                    with urllib.request.urlopen(req, timeout=10) as resp:
-                        h = json.loads(resp.read())
-                    check("[平台] cjg-report health（9 文件已加载）",
-                          bool(h.get("ok")) and bool(h.get("playbooks_loaded")), str(h)[:120])
-                except Exception as e:
-                    check("[平台] cjg-report health", False, str(e)[:120])
-        else:
-            print("  ℹ cjg-report 尚未部署（report_url 未配置）：部署后本检查自动生效")
     if WITH_CLOUD:
         import time as _time
         # 云端链路脚本路径：环境变量优先，其次按常见开发目录相对推导（不硬编码用户名/机器路径）

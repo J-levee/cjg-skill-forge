@@ -25,25 +25,9 @@
 """
 import json
 import os
-import re
 import subprocess
 import sys
 import uuid
-
-
-def _norm_path(p):
-    """归一用户输入路径：根治 git-bash '/c/...' 被 Windows Python abspath 误解析为 'C:\\c\\...'。
-    /c/ → C:/ ；expanduser ；去尾斜杠（保留盘符根）；None 原样返回。"""
-    if p is None:
-        return None
-    s = os.path.expanduser(str(p).strip())
-    m = re.match(r"^/([a-zA-Z])/(.*)$", s)
-    if m:
-        s = m.group(1).upper() + ":/" + m.group(2)
-    s = s.rstrip("/\\")
-    if len(s) == 2 and s[1] == ":":
-        s += "/"
-    return os.path.abspath(s)
 from datetime import datetime, timezone
 
 STATE_NAME = ".session_state.json"
@@ -367,8 +351,8 @@ def main():
         return 2
     # 技能目录：--dir（主或子命令）优先，否则用脚本位置推导（scripts/ 的父目录）
     sub_args = getattr(args, args.cmd, None)
-    skill_dir = _norm_path(args.dir or (sub_args.dir if sub_args else None) \
-        or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    skill_dir = args.dir or (sub_args.dir if sub_args else None) \
+        or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if args.cmd == "start":
         return cmd_start(skill_dir)
     if args.cmd == "signal":

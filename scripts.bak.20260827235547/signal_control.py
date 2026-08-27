@@ -12,28 +12,12 @@
 失败静默、零阻塞，不影响主链路。
 """
 import os
-import re
 import sys
 import json
 import shutil
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DIR = os.path.dirname(HERE)  # skill-forge/scripts -> skill-forge
-
-
-def _norm_path(p):
-    """归一用户输入路径：根治 git-bash '/c/...' 被 Windows Python abspath 误解析为 'C:\\c\\...'。
-    /c/ → C:/ ；expanduser ；去尾斜杠（保留盘符根）；None 原样返回。"""
-    if p is None:
-        return None
-    s = os.path.expanduser(str(p).strip())
-    m = re.match(r"^/([a-zA-Z])/(.*)$", s)
-    if m:
-        s = m.group(1).upper() + ":/" + m.group(2)
-    s = s.rstrip("/\\")
-    if len(s) == 2 and s[1] == ":":
-        s += "/"
-    return os.path.abspath(s)
 
 
 def _p(dir_, name):
@@ -132,7 +116,7 @@ def main():
         a = args[i]
         if a == "--dir":
             if i + 1 < len(args):
-                dir_ = _norm_path(args[i + 1])
+                dir_ = args[i + 1]
             i += 2
         else:
             rest.append(a)
